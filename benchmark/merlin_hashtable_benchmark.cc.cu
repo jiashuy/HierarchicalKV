@@ -19,14 +19,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <algorithm>
-#include <chrono>
 #include <iomanip>
 #include <iostream>
-#include <limits>
 #include <random>
 #include <thread>
-#include <unordered_map>
-#include <unordered_set>
 #include "benchmark_util.cuh"
 #include "merlin_hashtable.cuh"
 
@@ -38,60 +34,9 @@ using std::setfill;
 using std::setprecision;
 using std::setw;
 
+inline std::string rep(int n) { return std::string(n, ' '); }
+
 using namespace nv::merlin;
-
-inline uint64_t getTimestamp() {
-  return std::chrono::duration_cast<std::chrono::milliseconds>(
-             std::chrono::system_clock::now().time_since_epoch())
-      .count();
-}
-
-template <class K, class M>
-void create_random_keys(K* h_keys, M* h_metas, const int key_num_per_op) {
-  std::unordered_set<K> numbers;
-  std::random_device rd;
-  std::mt19937_64 eng(rd());
-  std::uniform_int_distribution<K> distr;
-  int i = 0;
-
-  while (numbers.size() < key_num_per_op) {
-    numbers.insert(distr(eng));
-  }
-  for (const K num : numbers) {
-    h_keys[i] = num;
-    h_metas[i] = getTimestamp();
-    i++;
-  }
-}
-
-std::string rep(int n) { return std::string(n, ' '); }
-
-template <class K, class M>
-void create_continuous_keys(K* h_keys, M* h_metas, const int key_num_per_op,
-                            const K start = 0) {
-  for (K i = 0; i < key_num_per_op; i++) {
-    h_keys[i] = start + static_cast<K>(i);
-    h_metas[i] = getTimestamp();
-  }
-}
-
-template <typename K, typename M>
-void set_partial_key(K* h_keys, M* h_metas, const int key_num_per_op,
-                     const float hitrate = 0.6f) {
-  static K unique_value = std::numeric_limits<K>::max();
-  int start = key_num_per_op * (1.0 - hitrate);
-  for (int i = start; i < key_num_per_op; i++) {
-    h_keys[i] = unique_value--;
-    h_metas[i] = getTimestamp();
-  }
-}
-
-template <typename M>
-void refresh_metas(M* h_metas, const int key_num_per_op) {
-  for (int i = 0; i < key_num_per_op; i++) {
-    h_metas[i] = getTimestamp();
-  }
-}
 
 void test_main(const size_t dim,
                const size_t init_capacity = 64 * 1024 * 1024UL,
@@ -177,7 +122,7 @@ void test_main(const size_t dim,
   auto diff_assign = benchmark::Timer<double>();
 
   while (cur_load_factor < load_factor) {
-    create_continuous_keys<K, M>(h_keys, h_metas, key_num_per_op, start);
+    benchmark::create_continuous_keys<K, M>(h_keys, h_metas, key_num_per_op, start);
     CUDA_CHECK(cudaMemcpy(d_keys, h_keys, key_num_per_op * sizeof(K),
                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_metas, h_metas, key_num_per_op * sizeof(M),
@@ -196,7 +141,7 @@ void test_main(const size_t dim,
     CUDA_CHECK(cudaStreamSynchronize(stream));
     diff_find.end();
 
-    refresh_metas<M>(h_metas, key_num_per_op);
+    benchmark::refresh_metas<M>(h_metas, key_num_per_op);
     CUDA_CHECK(cudaMemcpy(d_metas, h_metas, key_num_per_op * sizeof(M),
                           cudaMemcpyHostToDevice));
     diff_assign.start();
@@ -205,7 +150,7 @@ void test_main(const size_t dim,
     CUDA_CHECK(cudaStreamSynchronize(stream));
     diff_assign.end();
 
-    set_partial_key<K, M>(h_keys, h_metas, key_num_per_op, hitrate);
+    benchmark::set_partial_key<K, M>(h_keys, h_metas, key_num_per_op, hitrate);
     CUDA_CHECK(cudaMemcpy(d_keys, h_keys, key_num_per_op * sizeof(K),
                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_metas, h_metas, key_num_per_op * sizeof(M),

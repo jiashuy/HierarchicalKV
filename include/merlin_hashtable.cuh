@@ -234,6 +234,81 @@ class HashTable {
   /**
    * @brief Insert new key-value-meta tuples into the hash table.
    * If the key already exists, the values and metas are assigned new values.
+   * Used mainly to initialize the HashTable without call the 
+   * `upsert_kernel_with_io` when profiling
+   *
+   * If the target bucket is full, the keys with minimum meta will be
+   * overwritten by new key unless the meta of the new key is even less than
+   * minimum meta of the target bucket.
+   *
+   * @param n Number of key-value-meta tuples to insert or assign.
+   * @param keys The keys to insert on GPU-accessible memory with shape
+   * (n).
+   * @param values The values to insert on GPU-accessible memory with
+   * shape (n, DIM).
+   * @param metas The metas to insert on GPU-accessible memory with shape
+   * (n).
+   * @parblock
+   * The metas should be a `uint64_t` value. You can specify a value that
+   * such as the timestamp of the key insertion, number of the key
+   * occurrences, or another value to perform a custom eviction strategy.
+   *
+   * The @p metas should be `nullptr`, when the LRU eviction strategy is
+   * applied.
+   * @endparblock
+   *
+   * @param stream The CUDA stream that is used to execute the operation.
+   *
+   * @param ignore_evict_strategy A boolean option indicating whether if
+   * the insert_or_assign ignores the evict strategy of table with current
+   * metas anyway. If true, it does not check whether the metas confroms to
+   * the evict strategy. If false, it requires the metas follow the evict
+   * strategy of table.
+   */
+  void insert_or_assign_profile(const size_type n,
+                        const key_type* keys,              // (n)
+                        const value_type* values,          // (n, DIM)
+                        const meta_type* metas = nullptr,  // (n)
+                        cudaStream_t stream = 0,
+                        bool ignore_evict_strategy = false) {
+    if (n == 0) {
+      return;
+    }
+
+    while (!reach_max_capacity_ &&
+           fast_load_factor(n) > options_.max_load_factor) {
+      reserve(capacity() * 2);
+    }
+
+    if (!ignore_evict_strategy) {
+      check_evict_strategy(metas);
+    }
+
+    std::shared_lock<std::shared_timed_mutex> lock(mutex_, std::defer_lock);
+    if (!reach_max_capacity_) {
+      lock.lock();
+    }
+
+    if (true/*is_fast_mode()*/) {
+      using Selector =
+          SelectUpsertKernelWithIOProfile<key_type, value_type, meta_type>;
+      static thread_local int step_counter = 0;
+      static thread_local float load_factor = 0.0;
+
+      if (((step_counter++) % kernel_select_interval_) == 0) {
+        load_factor = fast_load_factor();
+      }
+
+      Selector::execute_kernel(
+          load_factor, options_.block_size, stream, n, c_table_index_, d_table_,
+          keys, reinterpret_cast<const value_type*>(values), metas);
+    }
+    CudaCheckError();
+  }
+
+  /**
+   * @brief Insert new key-value-meta tuples into the hash table.
+   * If the key already exists, the values and metas are assigned new values.
    *
    * If the target bucket is full, the keys with minimum meta will be
    * overwritten by new key unless the meta of the new key is even less than
