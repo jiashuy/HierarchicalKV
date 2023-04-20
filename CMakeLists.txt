@@ -90,6 +90,7 @@ add_executable(profiling_benchmark benchmark/profiling_and_benchmark.cc.cu)
 target_compile_features(profiling_benchmark PUBLIC cxx_std_14)
 set_target_properties(profiling_benchmark PROPERTIES  CUDA_ARCHITECTURES OFF)
 target_compile_options(profiling_benchmark PUBLIC --generate-line-info)
+#-maxrregcount 32
 
 add_executable(merlin_hashtable_test tests/merlin_hashtable_test.cc.cu)
 target_compile_features(merlin_hashtable_test PUBLIC cxx_std_14)

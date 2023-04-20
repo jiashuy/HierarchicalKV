@@ -29,7 +29,7 @@
 #define EPSILON 1e-3
 #define PRECISION 3
 
-const uint32_t kRepeat4Avg = 2;
+const uint32_t kRepeat4Avg = 10;
 
 inline std::string rep(int n) { return std::string(n, ' '); }
 
@@ -245,6 +245,20 @@ void testOneRound(const API_Select api, TestDescriptor & td,
   }
   cudaProfilerStop();
 
+  if (api == API_Select::find) {
+    // quick and unsufficient verify
+    bool* h_found;
+    CUDA_CHECK(cudaMallocHost(&h_found, key_num_per_op * sizeof(bool)));
+    CUDA_CHECK(cudaMemcpy(h_found, d_found, key_num_per_op * sizeof(bool),
+                          cudaMemcpyDeviceToHost));
+    int found_num = 0;
+    for (int i = 0; i < key_num_per_op; i++) {
+      if (h_found[i]) found_num++;
+    }
+    std::cout << "found number = " << found_num << std::endl;
+    CUDA_CHECK(cudaFreeHost(h_found));
+  }
+
   uint32_t hmem4values =
       td.capacity * options.dim * sizeof(V) / (1024 * 1024 * 1024);
   hmem4values = hmem4values < td.HBM4Values ? 0 : (hmem4values - td.HBM4Values);
@@ -347,7 +361,7 @@ std::vector<TestDescriptor> get_average_result(
 
 void print_for_terminal(const std::vector<TestDescriptor> & tds,
                         const std::vector<API_Select>& target_apis) {
-  std::cout << "======================================\n";
+  // std::cout << "======================================\n";
   for (auto& td : tds) {
     ///TODO: format
     std::cout << "bucket_size   load_factor   hit_rate  dim   capacity(M)   hbm(GB)   hmem(GB)  hit_mode"
@@ -453,7 +467,7 @@ void print_repeat_for_excel(const std::vector<std::vector<TestDescriptor>> & tds
 }
 
 int main(int argc, char* argv[]) {
-  benchmark::init_device(1, 0);
+  // benchmark::init_device(1, 0);
   try {
     {
 #ifdef PROFILE
@@ -509,7 +523,7 @@ int main(int argc, char* argv[]) {
           td.key_num_per_op = 256 * 1024UL;
           td.bucket_size = 128;
           td.load_factor = 1.0;
-          td.hit_rate = 0.6f;
+          td.hit_rate = 1.0f;
           td.hit_mode = Hit_Mode::last_insert;
           tds.push_back(td);     
         }
