@@ -27,6 +27,7 @@
 #include <type_traits>
 #include "merlin/array_kernels.cuh"
 #include "merlin/core_kernels.cuh"
+#include "merlin/core_kernels/lookup_kernels.cuh"
 #include "merlin/flexible_buffer.cuh"
 #include "merlin/group_lock.hpp"
 #include "merlin/memory_pool.cuh"
@@ -889,19 +890,31 @@ class HashTable {
 
     reader_shared_lock lock(mutex_);
 
+    uint32_t value_size = options_.dim * sizeof(V);
     if (is_fast_mode()) {
-      using Selector =
-          SelectLookupKernelWithIO<key_type, value_type, score_type>;
-      static thread_local int step_counter = 0;
-      static thread_local float load_factor = 0.0;
+      // Only bucket_size = 128
+      // On A100, the maximum dim which Pipeline support is 224 floats
+      if (options_.max_bucket_size == 128 &&
+          value_size <= (224 * sizeof(float))) {
+        using Selector =
+            SelectLookupKernelWithIOPipeline<key_type, value_type, score_type>;
+        Selector::execute_kernel(table_->buckets, table_->buckets_num,
+                                 options_.dim, stream, n, keys, values, scores,
+                                 founds);
+      } else {
+        using Selector =
+            SelectLookupKernelWithIO<key_type, value_type, score_type>;
+        static thread_local int step_counter = 0;
+        static thread_local float load_factor = 0.0;
 
-      if (((step_counter++) % kernel_select_interval_) == 0) {
-        load_factor = fast_load_factor(0, stream, false);
+        if (((step_counter++) % kernel_select_interval_) == 0) {
+          load_factor = fast_load_factor(0, stream, false);
+        }
+        Selector::execute_kernel(load_factor, options_.block_size,
+                                 options_.max_bucket_size, table_->buckets_num,
+                                 options_.dim, stream, n, d_table_, keys,
+                                 values, scores, founds);
       }
-      Selector::execute_kernel(load_factor, options_.block_size,
-                               options_.max_bucket_size, table_->buckets_num,
-                               options_.dim, stream, n, d_table_, keys, values,
-                               scores, founds);
     } else {
       const size_type dev_ws_size{n * (sizeof(value_type*) + sizeof(int))};
       auto dev_ws{dev_mem_pool_->get_workspace<1>(dev_ws_size, stream)};

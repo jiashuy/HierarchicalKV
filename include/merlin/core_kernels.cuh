@@ -16,17 +16,7 @@
 
 #pragma once
 
-#include <cooperative_groups.h>
-#include <cooperative_groups/reduce.h>
-#include <cuda/barrier>
-#include <mutex>
-#include <thread>
-#include <vector>
-#include "types.cuh"
-#include "utils.cuh"
-
-using namespace cooperative_groups;
-namespace cg = cooperative_groups;
+#include "core_kernels/kernel_utils.cuh"
 
 namespace nv {
 namespace merlin {
@@ -90,6 +80,10 @@ __global__ void create_atomic_keys(Bucket<K, V, S>* __restrict buckets,
     for (size_t i = 0; i < bucket_max_size; i++)
       new (buckets[start + tid].keys(i))
           AtomicKey<K>{static_cast<K>(EMPTY_KEY)};
+    K hashed_key = Murmur3HashDevice(static_cast<K>(EMPTY_KEY));
+    uint8_t digest = static_cast<uint8_t>(hashed_key >> 32);
+    for (size_t i = 0; i < bucket_max_size; i++)
+      buckets[start + tid].digests[i] = digest;
   }
 }
 
@@ -169,11 +163,19 @@ void initialize_buckets(Table<K, V, S>** table, const size_t start,
   }
 
   (*table)->num_of_memory_slices += num_of_memory_slices;
+  uint32_t bucket_max_size = static_cast<uint32_t>((*table)->bucket_max_size);
+  size_t bucket_memory_size =
+      bucket_max_size * (sizeof(AtomicKey<K>) + sizeof(AtomicScore<S>));
+  // Align the digests according to the cache line size.
+  uint32_t reserve_digest =
+      ((bucket_max_size + 127) / 128) * 128 * sizeof(uint8_t);
+  bucket_memory_size += reserve_digest;
   for (int i = start; i < end; i++) {
-    CUDA_CHECK(cudaMalloc(&((*table)->buckets[i].keys_),
-                          (*table)->bucket_max_size * sizeof(AtomicKey<K>)));
-    CUDA_CHECK(cudaMalloc(&((*table)->buckets[i].scores_),
-                          (*table)->bucket_max_size * sizeof(AtomicScore<S>)));
+    CUDA_CHECK(cudaMalloc(&((*table)->buckets[i].keys_), bucket_memory_size));
+    (*table)->buckets[i].scores_ = reinterpret_cast<AtomicScore<S>*>(
+        (*table)->buckets[i].keys_ + bucket_max_size);
+    (*table)->buckets[i].digests = reinterpret_cast<uint8_t*>(
+        (*table)->buckets[i].scores_ + bucket_max_size);
   }
 
   {
@@ -312,7 +314,6 @@ template <class K, class V, class S>
 void destroy_table(Table<K, V, S>** table) {
   for (int i = 0; i < (*table)->buckets_num; i++) {
     CUDA_CHECK(cudaFree((*table)->buckets[i].keys_));
-    CUDA_CHECK(cudaFree((*table)->buckets[i].scores_));
   }
 
   for (int i = 0; i < (*table)->num_of_memory_slices; i++) {
@@ -366,6 +367,9 @@ __forceinline__ __device__ void defragmentation_for_rehash(
         (empty_pos <= key_idx && key_idx < start_idx)) {
       const K key =
           (*(bucket->keys(key_idx))).load(cuda::std::memory_order_relaxed);
+      hashed_key = Murmur3HashDevice(key);
+      uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+      bucket->digests[empty_pos] = target_digest;
       (*(bucket->keys(empty_pos))).store(key, cuda::std::memory_order_relaxed);
       const S score =
           (*(bucket->scores(key_idx))).load(cuda::std::memory_order_relaxed);
@@ -375,6 +379,9 @@ __forceinline__ __device__ void defragmentation_for_rehash(
         bucket->vectors[empty_pos * dim + j] =
             bucket->vectors[key_idx * dim + j];
       }
+      hashed_key = Murmur3HashDevice(static_cast<K>(EMPTY_KEY));
+      target_digest = static_cast<uint8_t>(hashed_key >> 32);
+      bucket->digests[key_idx] = target_digest;
       (*(bucket->keys(key_idx)))
           .store(static_cast<K>(EMPTY_KEY), cuda::std::memory_order_relaxed);
       empty_pos = key_idx;
@@ -497,6 +504,9 @@ __forceinline__ __device__ void move_key_to_new_bucket(
           (new_start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
       local_size = buckets_size[new_bkt_idx];
       if (rank == src_lane) {
+        K hashed_key = Murmur3HashDevice(key);
+        uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+        new_bucket->digests[key_pos] = target_digest;
         new_bucket->keys(key_pos)->store(key, cuda::std::memory_order_relaxed);
         new_bucket->scores(key_pos)->store(score,
                                            cuda::std::memory_order_relaxed);
@@ -556,6 +566,9 @@ __global__ void rehash_kernel_for_fast_mode(
               new_bkt_idx, start_idx, buckets_size, bucket_max_size,
               buckets_num, table->dim);
           if (rank == 0) {
+            K hashed_key = Murmur3HashDevice(static_cast<K>(EMPTY_KEY));
+            uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+            bucket->digests[key_idx] = target_digest;
             (bucket->keys(key_idx))
                 ->store(static_cast<K>(EMPTY_KEY),
                         cuda::std::memory_order_relaxed);
@@ -1051,7 +1064,7 @@ template <class K, class V, class S>
 __forceinline__ __device__ Bucket<K, V, S>* get_key_position(
     Bucket<K, V, S>* __restrict buckets, const K key, size_t& bkt_idx,
     size_t& start_idx, const size_t buckets_num, const size_t bucket_max_size) {
-  const uint32_t hashed_key = Murmur3HashDevice(key);
+  const K hashed_key = Murmur3HashDevice(key);
   const size_t global_idx = hashed_key % (buckets_num * bucket_max_size);
   bkt_idx = global_idx / bucket_max_size;
   start_idx = global_idx % bucket_max_size;
@@ -1133,6 +1146,9 @@ __global__ void upsert_kernel_with_io_core(
                               dim);
     if (g.thread_rank() == src_lane) {
       update_score(bucket, key_pos, scores, key_idx);
+      K hashed_key = Murmur3HashDevice(insert_key);
+      uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+      bucket->digests[key_pos] = target_digest;
       (bucket->keys(key_pos))
           ->store(insert_key, cuda::std::memory_order_relaxed);
     }
@@ -1214,6 +1230,9 @@ __global__ void upsert_and_evict_kernel_with_io_core(
                               dim);
     if (g.thread_rank() == src_lane) {
       update_score(bucket, key_pos, scores, key_idx);
+      K hashed_key = Murmur3HashDevice(insert_key);
+      uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+      bucket->digests[key_pos] = target_digest;
       (bucket->keys(key_pos))
           ->store(insert_key, cuda::std::memory_order_relaxed);
     }
@@ -1366,6 +1385,9 @@ __global__ void upsert_kernel(const Table<K, V, S>* __restrict table,
     if (g.thread_rank() == src_lane) {
       *(vectors + key_idx) = (bucket->vectors + key_pos * dim);
       update_score(bucket, key_pos, scores, key_idx);
+      K hashed_key = Murmur3HashDevice(insert_key);
+      uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+      bucket->digests[key_pos] = target_digest;
       (bucket->keys(key_pos))
           ->store(insert_key, cuda::std::memory_order_relaxed);
     }
@@ -1429,6 +1451,9 @@ __global__ void accum_kernel(
             *(status + key_idx) = local_found;
           }
           if (local_found == existed[key_idx]) {
+            K hashed_key = Murmur3HashDevice(insert_key);
+            uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+            bucket->digests[key_pos] = target_digest;
             (bucket->keys(key_pos))
                 ->store(insert_key, cuda::std::memory_order_relaxed);
             if (!local_found) {
@@ -1449,6 +1474,9 @@ __global__ void accum_kernel(
     if (!found_or_empty_vote) {
       if (rank == (bucket->min_pos % TILE_SIZE)) {
         key_pos = bucket->min_pos;
+        K hashed_key = Murmur3HashDevice(insert_key);
+        uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+        bucket->digests[key_pos] = target_digest;
         (bucket->keys(key_pos))
             ->store(insert_key, cuda::std::memory_order_relaxed);
         *(vectors + key_idx) = (bucket->vectors + key_pos * dim);
@@ -1705,6 +1733,9 @@ __global__ void clear_kernel(Table<K, V, S>* __restrict table, size_t N) {
     int bkt_idx = t / bucket_max_size;
     Bucket<K, V, S>* bucket = &(table->buckets[bkt_idx]);
 
+    K hashed_key = Murmur3HashDevice(static_cast<K>(EMPTY_KEY));
+    uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+    bucket->digests[key_idx] = target_digest;
     (bucket->keys(key_idx))
         ->store(static_cast<K>(EMPTY_KEY), cuda::std::memory_order_relaxed);
     if (key_idx == 0) {
@@ -1764,6 +1795,9 @@ __global__ void remove_kernel(const Table<K, V, S>* __restrict table,
       if (g.thread_rank() == src_lane) {
         const int key_pos =
             (start_idx + tile_offset + src_lane) & (bucket_max_size - 1);
+        K hashed_key = Murmur3HashDevice(static_cast<K>(EMPTY_KEY));
+        uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+        bucket->digests[key_pos] = target_digest;
         (bucket->keys(key_pos))
             ->store(static_cast<K>(RECLAIM_KEY),
                     cuda::std::memory_order_relaxed);
@@ -1810,6 +1844,9 @@ __global__ void remove_kernel(const Table<K, V, S>* __restrict table,
         if (pred(current_key, current_score, pattern, threshold)) {
           atomicAdd(count, 1);
           key_pos = key_offset;
+          K hashed_key = Murmur3HashDevice(static_cast<K>(EMPTY_KEY));
+          uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+          bucket->digests[key_pos] = target_digest;
           (bucket->keys(key_pos))
               ->store(static_cast<K>(RECLAIM_KEY),
                       cuda::std::memory_order_relaxed);
@@ -2089,6 +2126,9 @@ __global__ void find_or_insert_kernel_with_io(
     }
 
     if (g.thread_rank() == src_lane) {
+      K hashed_key = Murmur3HashDevice(find_or_insert_key);
+      uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+      bucket->digests[key_pos] = target_digest;
       (bucket->keys(key_pos))
           ->store(find_or_insert_key, cuda::std::memory_order_relaxed);
     }
@@ -2207,6 +2247,9 @@ __global__ void find_or_insert_kernel(
     }
 
     if (g.thread_rank() == src_lane) {
+      K hashed_key = Murmur3HashDevice(find_or_insert_key);
+      uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+      bucket->digests[key_pos] = target_digest;
       (bucket->keys(key_pos))
           ->store(find_or_insert_key, cuda::std::memory_order_relaxed);
     }
@@ -2288,6 +2331,9 @@ __global__ void find_ptr_or_insert_kernel(
     }
 
     if (g.thread_rank() == src_lane) {
+      K hashed_key = Murmur3HashDevice(find_or_insert_key);
+      uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+      bucket->digests[key_pos] = target_digest;
       (bucket->keys(key_pos))
           ->store(find_or_insert_key, cuda::std::memory_order_relaxed);
     }

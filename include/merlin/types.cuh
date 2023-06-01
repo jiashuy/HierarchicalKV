@@ -56,7 +56,10 @@ using AtomicPos = cuda::atomic<T, cuda::thread_scope_device>;
 template <class K, class V, class S>
 struct Bucket {
   AtomicKey<K>* keys_;
+  /// TODO: compute the pointer of scores and digests using bucket_max_size
   AtomicScore<S>* scores_;
+  /// @brief not visible to users
+  uint8_t* digests;
   V* vectors;  // Pinned memory or HBM
 
   /* For upsert_kernel without user specified scores
