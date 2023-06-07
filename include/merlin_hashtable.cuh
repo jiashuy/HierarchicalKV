@@ -27,7 +27,6 @@
 #include <type_traits>
 #include "merlin/array_kernels.cuh"
 #include "merlin/core_kernels.cuh"
-#include "merlin/core_kernels/lookup_kernels.cuh"
 #include "merlin/flexible_buffer.cuh"
 #include "merlin/group_lock.hpp"
 #include "merlin/memory_pool.cuh"
@@ -148,7 +147,8 @@ static constexpr auto& thrust_par = thrust::cuda::par;
  *           The currently supported data type is only `uint64_t`.
  *
  */
-template <class K, class V, class S = uint64_t>
+template <typename K, typename V, typename S = uint64_t,
+          typename ArchTag = Sm80>
 class HashTable {
  public:
   using size_type = size_t;
@@ -198,7 +198,7 @@ class HashTable {
    *
    * @param options The configuration options.
    */
-  void init(const HashTableOptions options) {
+  void init(const HashTableOptions& options) {
     if (initialized_) {
       return;
     }
@@ -209,6 +209,16 @@ class HashTable {
     } else {
       CUDA_CHECK(cudaGetDevice(&(options_.device_id)));
     }
+
+    MERLIN_CHECK(ispow2(static_cast<uint32_t>(options_.max_bucket_size)),
+                 "Bucket size should be the pow of 2");
+
+    MERLIN_CHECK(
+        (options_.max_bucket_size * (sizeof(key_type) + sizeof(score_type))) %
+                128 ==
+            0,
+        "Storage size of keys and scores in one bucket should be the mutiple "
+        "of cache line size");
 
     // Construct table.
     cudaDeviceProp deviceProp;
@@ -890,17 +900,19 @@ class HashTable {
 
     reader_shared_lock lock(mutex_);
 
-    uint32_t value_size = options_.dim * sizeof(V);
+    const uint32_t value_size = options_.dim * sizeof(V);
+
     if (is_fast_mode()) {
-      // Only bucket_size = 128
-      // On A100, the maximum dim which Pipeline support is 224 floats
-      if (options_.max_bucket_size == 128 &&
-          value_size <= (224 * sizeof(float))) {
-        using Selector =
-            SelectLookupKernelWithIOPipeline<key_type, value_type, score_type>;
-        Selector::execute_kernel(table_->buckets, table_->buckets_num,
-                                 options_.dim, stream, n, keys, values, scores,
-                                 founds);
+      using Selector = SelectLookupKernelWithIOPipeline<key_type, value_type,
+                                                        score_type, ArchTag>;
+      const uint32_t pipeline_max_size = Selector::max_value_size();
+      // Only support bucket_size = 128
+      if (options_.max_bucket_size == 128 && value_size <= pipeline_max_size) {
+        LookupKernelParams<key_type, value_type, score_type> lookupParams(
+            table_->buckets, table_->buckets_num,
+            static_cast<uint32_t>(options_.dim), keys, values, scores, founds,
+            n);
+        Selector::execute_kernel(lookupParams, stream);
       } else {
         using Selector =
             SelectLookupKernelWithIO<key_type, value_type, score_type>;
