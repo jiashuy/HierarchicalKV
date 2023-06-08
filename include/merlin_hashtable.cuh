@@ -247,6 +247,12 @@ class HashTable {
     CudaCheckError();
   }
 
+  /// @brief Commonly used for profiling.
+  /// @return Pointer to table_.
+  nv::merlin::Table<K, V, S>* get_host_table() const {
+    return table_;
+  }
+
   /**
    * @brief Insert new key-value-score tuples into the hash table.
    * If the key already exists, the values and scores are assigned new values.
