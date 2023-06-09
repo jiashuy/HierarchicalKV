@@ -47,20 +47,74 @@ __global__ void lookup_kernel_with_io_v2_kernel1(
   }
 }
 
+// A GROUP copy a value
 template <class K, class V, class S, 
-          int32_t TILE_SIZE = 32, int32_t MASK_WIDTH = 5>
+          int32_t GROUP_SIZE = 32, int32_t MASK_WIDTH = 5>
 __global__ void lookup_kernel_with_io_v2_kernel2(
     const int dim, V* __restrict values, V** __restrict values_addr, 
-    bool* __restrict found, size_t n) {
+    bool* __restrict founds, size_t n) {
 
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int rank = tid & (TILE_SIZE - 1);
+  int rank = tid & (GROUP_SIZE - 1);
   int key_idx = tid >> MASK_WIDTH;
   if (key_idx >= n) return;
 
   auto v_src = values_addr[key_idx];
   auto v_dst = values + key_idx * dim;
-  if (found[key_idx]) {
+  if (founds[key_idx]) {
     FETCH_FLOAT4(v_dst[rank * 4]) = FETCH_FLOAT4(v_src[rank * 4]);
+  }
+}
+
+// A GROUP copy GROUP_SIZE values
+template <class K, class V, class S, 
+          int32_t GROUP_SIZE = 32, int32_t MASK_WIDTH = 5>
+__global__ void lookup_kernel_with_io_v2_kernel2_test1(
+    const int dim, V* __restrict values, V** __restrict values_addr, 
+    bool* __restrict founds, size_t n) {
+  __shared__ V* sm_values_addr[128];
+  __shared__ int sm_founds[128];
+
+  int groupID = threadIdx.x >> MASK_WIDTH;
+  int key_idx_base = (blockIdx.x * blockDim.x) + groupID * GROUP_SIZE;
+
+  int loop_num = n - key_idx_base < GROUP_SIZE ? n - key_idx_base : GROUP_SIZE;
+  int rank = threadIdx.x & (GROUP_SIZE - 1);
+  if (rank < loop_num) {
+    sm_values_addr[groupID * GROUP_SIZE + rank] = values_addr[key_idx_base + rank];
+    sm_founds[groupID * GROUP_SIZE + rank] = static_cast<int>(founds[key_idx_base + rank]);
+  }
+  for (int i = 0; i < loop_num; i++) {
+    auto v_src = sm_values_addr[groupID * GROUP_SIZE + i];
+    auto v_dst = values + (key_idx_base + i) * dim;
+    if (sm_founds[groupID * GROUP_SIZE + i])
+      FETCH_FLOAT4(v_dst[rank * 4]) = FETCH_FLOAT4(v_src[rank * 4]);
+  }
+}
+
+// A GROUP copy GROUP_SIZE values: prefetch
+template <class K, class V, class S, 
+          int32_t GROUP_SIZE = 32, int32_t MASK_WIDTH = 5>
+__global__ void lookup_kernel_with_io_v2_kernel2_test2(
+    const int dim, V* __restrict values, V** __restrict values_addr, 
+    bool* __restrict founds, size_t n) {
+  __shared__ V* sm_values_addr[128];
+  __shared__ int sm_founds[128];
+  __shared__ V sm_values[2][128 * 4];
+
+  int groupID = threadIdx.x >> MASK_WIDTH;
+  int key_idx_base = (blockIdx.x * blockDim.x) + groupID * GROUP_SIZE;
+
+  int loop_num = n - key_idx_base < GROUP_SIZE ? n - key_idx_base : GROUP_SIZE;
+  int rank = threadIdx.x & (GROUP_SIZE - 1);
+  if (rank < loop_num) {
+    sm_values_addr[groupID * GROUP_SIZE + rank] = values_addr[key_idx_base + rank];
+    sm_founds[groupID * GROUP_SIZE + rank] = static_cast<int>(founds[key_idx_base + rank]);
+  }
+  for (int i = 0; i < loop_num; i++) {
+    auto v_src = sm_values_addr[groupID * GROUP_SIZE + i];
+    auto v_dst = values + (key_idx_base + i) * dim;
+    if (sm_founds[groupID * GROUP_SIZE + i])
+      FETCH_FLOAT4(v_dst[rank * 4]) = FETCH_FLOAT4(v_src[rank * 4]);
   }
 }

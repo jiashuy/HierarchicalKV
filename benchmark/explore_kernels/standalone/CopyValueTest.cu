@@ -6,27 +6,15 @@
 #include "../common.cuh"
 #include "../../../include/merlin/core_kernels/kernel_utils.cuh"
 using namespace std;
+using namespace nv::merlin;
 /*
-A100 80G:　 2039  GB/s 
-A100 40G:　 1555  GB/s 
-3090    :   936.2 GB/s
+A100 80G: 2039  GB/s 
+A100 40G: 1555  GB/s 
+3090    : 936.2 GB/s
 */
 const float PeakBW = 2039.0f;
 const int REPEAT = 20;
-const uint64_t LEN = 128 * 1024 * 1024UL;
-
-
-#define CHECK_CUDA(expr)                             \
-{                                                    \
-  auto status = (expr);                              \
-  if (status != cudaSuccess) {                       \
-    std::cout << "CUDA Error at "                    \
-              << __FILE__ << ": "                    \
-              << __LINE__ << "\n"                    \
-              << cudaGetErrorName(status) << " "     \
-              << cudaGetErrorString(status) << "\n"; \
-  }                                                  \
-}                                   
+const uint64_t LEN = 128 * 1024 * 1024UL;                                
 
 #define FETCH_FLOAT4(start) (reinterpret_cast<float4*>(&(start))[0])
 // it seems that cuda only check if the base address whether out of bound

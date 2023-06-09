@@ -54,6 +54,7 @@ constexpr double EPSILON = 1e-3;
 constexpr int PRECISION = 3;
 constexpr TimeUnit tu = TimeUnit::MilliSecond;
 constexpr int BLOCK_SIZE = 128;
+constexpr int WARP_NUM_PER_WARP = BLOCK_SIZE / 32;
 
 static KernelTimer<float> timer = KernelTimer<float>(tu);
 
@@ -329,29 +330,43 @@ float test_one_api(const API_Select api, TestDescriptor& td,
   cudaProfilerStart();
   switch (api) {
     case API_Select::find: {
-      timer.start();
-      //------------------------------------------------------------------------------------
+      // timer.start();
+      //////////////////////////////////////////////////////////////////////////////////////
       // table->find(key_num_per_op, d_keys, d_vectors, d_found, nullptr, stream);
-      //------------------------------------------------------------------------------------
+      //////////////////////////////////////////////////////////////////////////////////////
       // lookup_kernel_with_io_v1<K, V, S>
       //     <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
       //         table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
       //         d_keys, d_vectors, d_scores, d_found, key_num_per_op);
-      //------------------------------------------------------------------------------------
+      //////////////////////////////////////////////////////////////////////////////////////
+      //--------------------------- probing using single kernel ---------------------
       lookup_kernel_with_io_v2_kernel1<K, V, S>
           <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
               table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
               d_keys, values_addr, d_scores, d_found, key_num_per_op);
+      timer.start();
+      ////////////////////////////////////////////--------------------------------------
+      //--------------------------- copy value using single kernel ---------------------
+      // if (options.dim == 4) {
+      //   lookup_kernel_with_io_v2_kernel2<K, V, S, 1, 0>
+      //       <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //         options.dim, d_vectors, values_addr, d_found, key_num_per_op);
+      // } else if (options.dim == 128) {
+      //   lookup_kernel_with_io_v2_kernel2<K, V, S, 32, 5>
+      //       <<<(key_num_per_op + WARP_NUM_PER_WARP - 1) / WARP_NUM_PER_WARP, BLOCK_SIZE, 0, stream>>>(
+      //         options.dim, d_vectors, values_addr, d_found, key_num_per_op);
+      // }
+      //--------------------------- copy values using test1 ---------------------
       if (options.dim == 4) {
-        lookup_kernel_with_io_v2_kernel2<K, V, S, 1, 0>
+        lookup_kernel_with_io_v2_kernel2_test1<K, V, S, 1, 0>
             <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
               options.dim, d_vectors, values_addr, d_found, key_num_per_op);
       } else if (options.dim == 128) {
-        lookup_kernel_with_io_v2_kernel2<K, V, S, 32, 5>
-            <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+        lookup_kernel_with_io_v2_kernel2_test1<K, V, S, 32, 5>
+             <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
               options.dim, d_vectors, values_addr, d_found, key_num_per_op);
       }
-      //------------------------------------------------------------------------------------
+      //////////////////////////////////////////////////////////////////////////////////////
 
       CUDA_CHECK(cudaStreamSynchronize(stream));
       timer.end();
@@ -505,6 +520,7 @@ void test_by_discription(TestDescriptor& td) {
               << sol << " %\n"; 
   }
 }
+
 int main(int argc, char* argv[]) {
   try {
     {
@@ -515,12 +531,12 @@ int main(int argc, char* argv[]) {
       td.hit_rate = 1.0f;
       td.hit_mode = Hit_Mode::last_insert;
 
-      td.dim = 4;
-      std::cout << "Capacity = 64 * 1024 * 1024 \t"
-                << "Batch = 1024 * 1024 \t"
-                << "Key = 64 bits \t"
-                << "Value = 16 B\n";
-      test_by_discription(td);
+      // td.dim = 4;
+      // std::cout << "Capacity = 64 * 1024 * 1024 \t"
+      //           << "Batch = 1024 * 1024 \t"
+      //           << "Key = 64 bits \t"
+      //           << "Value = 16 B\n";
+      // test_by_discription(td);
       td.dim = 128;
       std::cout << "Capacity = 64 * 1024 * 1024 \t"
                 << "Batch = 1024 * 1024 \t"
