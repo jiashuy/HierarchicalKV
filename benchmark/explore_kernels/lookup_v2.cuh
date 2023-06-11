@@ -72,13 +72,15 @@ template <class K, class V, class S,
 __global__ void lookup_kernel_with_io_v2_kernel2_test1(
     const int dim, V* __restrict values, V** __restrict values_addr, 
     bool* __restrict founds, size_t n) {
-  __shared__ V* sm_values_addr[128];
-  __shared__ int sm_founds[128];
+  constexpr int BLOCK_SIZE = 128;
+  __shared__ V* sm_values_addr[BLOCK_SIZE];
+  __shared__ int sm_founds[BLOCK_SIZE];
 
   int groupID = threadIdx.x >> MASK_WIDTH;
   int key_idx_base = (blockIdx.x * blockDim.x) + groupID * GROUP_SIZE;
 
   int loop_num = n - key_idx_base < GROUP_SIZE ? n - key_idx_base : GROUP_SIZE;
+  if (loop_num <= 0) return; 
   int rank = threadIdx.x & (GROUP_SIZE - 1);
   if (rank < loop_num) {
     sm_values_addr[groupID * GROUP_SIZE + rank] = values_addr[key_idx_base + rank];
@@ -92,29 +94,77 @@ __global__ void lookup_kernel_with_io_v2_kernel2_test1(
   }
 }
 
-// A GROUP copy GROUP_SIZE values: prefetch
+// A GROUP copy GROUP_SIZE values: 
+// prefetch using async copy, write back using cache hint
 template <class K, class V, class S, 
           int32_t GROUP_SIZE = 32, int32_t MASK_WIDTH = 5>
 __global__ void lookup_kernel_with_io_v2_kernel2_test2(
     const int dim, V* __restrict values, V** __restrict values_addr, 
     bool* __restrict founds, size_t n) {
-  __shared__ V* sm_values_addr[128];
-  __shared__ int sm_founds[128];
-  __shared__ V sm_values[2][128 * 4];
+  constexpr int BLOCK_SIZE = 128;
+  constexpr int GROUP_NUM = BLOCK_SIZE / GROUP_SIZE;
+  __shared__ V* sm_values_addr[BLOCK_SIZE];
+  __shared__ int sm_founds[BLOCK_SIZE];
+  __shared__ V sm_values[2][GROUP_NUM][GROUP_SIZE * 4];
 
   int groupID = threadIdx.x >> MASK_WIDTH;
   int key_idx_base = (blockIdx.x * blockDim.x) + groupID * GROUP_SIZE;
 
   int loop_num = n - key_idx_base < GROUP_SIZE ? n - key_idx_base : GROUP_SIZE;
+  if (loop_num <= 0) return; 
   int rank = threadIdx.x & (GROUP_SIZE - 1);
   if (rank < loop_num) {
-    sm_values_addr[groupID * GROUP_SIZE + rank] = values_addr[key_idx_base + rank];
-    sm_founds[groupID * GROUP_SIZE + rank] = static_cast<int>(founds[key_idx_base + rank]);
+    int key_idx_block = groupID * GROUP_SIZE + rank;
+    int key_idx_grid = key_idx_base + rank;
+    __pipeline_memcpy_async(sm_values_addr + key_idx_block, values_addr + key_idx_grid,
+                            sizeof(V*));
+    __pipeline_commit();
+    sm_founds[key_idx_block] = static_cast<int>(founds[key_idx_grid]);
   }
+  __pipeline_wait_prior(0);
+  V* v_src = sm_values_addr[groupID * GROUP_SIZE];
+  V* v_dst = sm_values[0][groupID];
+  __pipeline_memcpy_async(v_dst, 
+                          v_src,
+                          sizeof(float4));
+  __pipeline_commit();
   for (int i = 0; i < loop_num; i++) {
-    auto v_src = sm_values_addr[groupID * GROUP_SIZE + i];
-    auto v_dst = values + (key_idx_base + i) * dim;
-    if (sm_founds[groupID * GROUP_SIZE + i])
-      FETCH_FLOAT4(v_dst[rank * 4]) = FETCH_FLOAT4(v_src[rank * 4]);
+    if ((i + 1) < loop_num) {
+      V* v_dst = sm_values[(i & 0x01) ^ 1][groupID];
+      V* v_src = sm_values_addr[groupID * GROUP_SIZE + i + 1];
+      __pipeline_memcpy_async(v_dst + rank * 4, 
+                              v_src + rank * 4,
+                              sizeof(float4));
+    }
+    __pipeline_commit();
+    __pipeline_wait_prior(1);
+    V* v_src = sm_values[(i & 0x01) ^ 0][groupID];
+    V* v_dst = values + (key_idx_base + i) * dim;
+    if (sm_founds[groupID * GROUP_SIZE + i]) {
+      float4 value_ = FETCH_FLOAT4(v_src[rank * 4]);
+      __stwt(reinterpret_cast<float4*>(v_dst + rank * 4), value_);
+    }
   }
+}
+
+// Test Runtime API : cudaMemcpyAsync, contrast test
+template<typename V>
+float test_cudaMemcpyAsync(const size_t LEN) {
+  V *dev_src, *dev_dst;
+  float time;
+  CUDA_CHECK(cudaMalloc(&dev_src, LEN * sizeof(V)));
+  CUDA_CHECK(cudaMalloc(&dev_dst, LEN * sizeof(V)));
+  cudaEvent_t start, stop;
+  CUDA_CHECK(cudaEventCreate(&start));
+  CUDA_CHECK(cudaEventCreate(&stop));
+  CUDA_CHECK(cudaEventRecord(start));
+  CUDA_CHECK(cudaMemcpyAsync(dev_dst, dev_src, LEN * sizeof(V), cudaMemcpyDeviceToDevice));
+  CUDA_CHECK(cudaEventRecord(stop));
+  CUDA_CHECK(cudaEventSynchronize(stop));
+  CUDA_CHECK(cudaEventElapsedTime(&time, start, stop));
+  CUDA_CHECK(cudaEventDestroy(start));
+  CUDA_CHECK(cudaEventDestroy(stop));
+  CUDA_CHECK(cudaFree(dev_src));
+  CUDA_CHECK(cudaFree(dev_dst));  
+  return time;
 }

@@ -410,6 +410,46 @@ Load factor 0.980       0.681 ms                1.540 billionKV/s               
 
 =========== A group copy GROUP_SIZE values (copy value using test1)
 
+Capacity = 64 * 1024 * 1024     Batch = 1024 * 1024     Key = 64 bits   Value = 16 B
+Loop number for init : 64
+Load factor : 0.999
+Hit rate : 1.000
+Found keys : 1048576
+Correct value : 1048576
+Load factor 0.020       0.091 ms                11.506 billionKV/s              16.817 %
+Load factor 0.050       0.090 ms                11.636 billionKV/s              17.008 %
+Load factor 0.080       0.090 ms                11.703 billionKV/s              17.105 %
+Load factor 0.110       0.089 ms                11.770 billionKV/s              17.203 %
+Load factor 0.140       0.090 ms                11.703 billionKV/s              17.105 %
+Load factor 0.170       0.089 ms                11.770 billionKV/s              17.203 %
+Load factor 0.200       0.091 ms                11.571 billionKV/s              16.912 %
+Load factor 0.230       0.090 ms                11.703 billionKV/s              17.105 %
+Load factor 0.260       0.092 ms                11.441 billionKV/s              16.723 %
+Load factor 0.290       0.090 ms                11.636 billionKV/s              17.008 %
+Load factor 0.320       0.090 ms                11.636 billionKV/s              17.008 %
+Load factor 0.350       0.091 ms                11.571 billionKV/s              16.912 %
+Load factor 0.380       0.090 ms                11.703 billionKV/s              17.105 %
+Load factor 0.410       0.091 ms                11.571 billionKV/s              16.912 %
+Load factor 0.440       0.090 ms                11.636 billionKV/s              17.008 %
+Load factor 0.470       0.090 ms                11.703 billionKV/s              17.105 %
+Load factor 0.500       0.091 ms                11.506 billionKV/s              16.817 %
+Load factor 0.530       0.091 ms                11.571 billionKV/s              16.912 %
+Load factor 0.560       0.090 ms                11.703 billionKV/s              17.105 %
+Load factor 0.590       0.089 ms                11.838 billionKV/s              17.303 %
+Load factor 0.620       0.090 ms                11.636 billionKV/s              17.008 %
+Load factor 0.650       0.090 ms                11.703 billionKV/s              17.105 %
+Load factor 0.680       0.090 ms                11.703 billionKV/s              17.105 %
+Load factor 0.710       0.090 ms                11.636 billionKV/s              17.008 %
+Load factor 0.740       0.089 ms                11.770 billionKV/s              17.203 %
+Load factor 0.770       0.089 ms                11.770 billionKV/s              17.203 %
+Load factor 0.800       0.088 ms                11.907 billionKV/s              17.403 %
+Load factor 0.830       0.088 ms                11.907 billionKV/s              17.403 %
+Load factor 0.860       0.089 ms                11.838 billionKV/s              17.303 %
+Load factor 0.890       0.088 ms                11.977 billionKV/s              17.505 %
+Load factor 0.920       0.088 ms                11.977 billionKV/s              17.505 %
+Load factor 0.950       0.089 ms                11.770 billionKV/s              17.203 %
+Load factor 0.980       0.090 ms                11.703 billionKV/s              17.105 %
+
 Capacity = 64 * 1024 * 1024     Batch = 1024 * 1024     Key = 64 bits   Value = 512 B
 Loop number for init : 64
 Load factor : 0.999
@@ -449,3 +489,87 @@ Load factor 0.890       0.647 ms                1.622 billionKV/s               
 Load factor 0.920       0.646 ms                1.624 billionKV/s               75.962 %
 Load factor 0.950       0.646 ms                1.623 billionKV/s               75.902 %
 Load factor 0.980       0.647 ms                1.622 billionKV/s               75.842 %
+
+
+=========== A group copy GROUP_SIZE values (copy value using test2)
+
+Capacity = 64 * 1024 * 1024     Batch = 1024 * 1024     Key = 64 bits   Value = 16 B
+Loop number for init : 64
+Load factor : 0.999
+Hit rate : 1.000
+Found keys : 1048576
+Correct value : 1048576
+Load factor 0.020       0.090 ms                11.636 billionKV/s              17.008 %
+Load factor 0.050       0.091 ms                11.506 billionKV/s              16.817 %
+Load factor 0.080       0.091 ms                11.506 billionKV/s              16.817 %
+Load factor 0.110       0.091 ms                11.571 billionKV/s              16.912 %
+Load factor 0.140       0.091 ms                11.571 billionKV/s              16.912 %
+Load factor 0.170       0.091 ms                11.571 billionKV/s              16.912 %
+Load factor 0.200       0.090 ms                11.703 billionKV/s              17.105 %
+Load factor 0.230       0.091 ms                11.571 billionKV/s              16.912 %
+Load factor 0.260       0.091 ms                11.506 billionKV/s              16.817 %
+Load factor 0.290       0.091 ms                11.571 billionKV/s              16.912 %
+Load factor 0.320       0.090 ms                11.636 billionKV/s              17.008 %
+Load factor 0.350       0.091 ms                11.506 billionKV/s              16.817 %
+Load factor 0.380       0.090 ms                11.636 billionKV/s              17.008 %
+Load factor 0.410       0.091 ms                11.571 billionKV/s              16.912 %
+Load factor 0.440       0.091 ms                11.506 billionKV/s              16.817 %
+Load factor 0.470       0.090 ms                11.636 billionKV/s              17.008 %
+Load factor 0.500       0.091 ms                11.571 billionKV/s              16.912 %
+Load factor 0.530       0.092 ms                11.441 billionKV/s              16.723 %
+Load factor 0.560       0.089 ms                11.770 billionKV/s              17.203 %
+Load factor 0.590       0.091 ms                11.571 billionKV/s              16.912 %
+Load factor 0.620       0.091 ms                11.506 billionKV/s              16.817 %
+Load factor 0.650       0.091 ms                11.571 billionKV/s              16.912 %
+Load factor 0.680       0.090 ms                11.703 billionKV/s              17.105 %
+Load factor 0.710       0.090 ms                11.636 billionKV/s              17.008 %
+Load factor 0.740       0.090 ms                11.636 billionKV/s              17.008 %
+Load factor 0.770       0.090 ms                11.703 billionKV/s              17.105 %
+Load factor 0.800       0.089 ms                11.838 billionKV/s              17.303 %
+Load factor 0.830       0.089 ms                11.838 billionKV/s              17.303 %
+Load factor 0.860       0.090 ms                11.703 billionKV/s              17.105 %
+Load factor 0.890       0.088 ms                11.977 billionKV/s              17.505 %
+Load factor 0.920       0.089 ms                11.838 billionKV/s              17.303 %
+Load factor 0.950       0.088 ms                11.907 billionKV/s              17.403 %
+Load factor 0.980       0.089 ms                11.770 billionKV/s              17.203 %
+
+
+Capacity = 64 * 1024 * 1024     Batch = 1024 * 1024     Key = 64 bits   Value = 512 B
+Loop number for init : 64
+Load factor : 0.999
+Hit rate : 1.000
+Found keys : 1048576
+Correct value : 1015808
+Load factor 0.020       0.643 ms                1.631 billionKV/s               76.265 %
+Load factor 0.050       0.641 ms                1.636 billionKV/s               76.508 %
+Load factor 0.080       0.645 ms                1.627 billionKV/s               76.083 %
+Load factor 0.110       0.642 ms                1.633 billionKV/s               76.386 %
+Load factor 0.140       0.643 ms                1.631 billionKV/s               76.265 %
+Load factor 0.170       0.643 ms                1.632 billionKV/s               76.325 %
+Load factor 0.200       0.645 ms                1.625 billionKV/s               76.023 %
+Load factor 0.230       0.644 ms                1.628 billionKV/s               76.143 %
+Load factor 0.260       0.644 ms                1.629 billionKV/s               76.204 %
+Load factor 0.290       0.644 ms                1.629 billionKV/s               76.204 %
+Load factor 0.320       0.644 ms                1.629 billionKV/s               76.204 %
+Load factor 0.350       0.642 ms                1.634 billionKV/s               76.447 %
+Load factor 0.380       0.643 ms                1.631 billionKV/s               76.265 %
+Load factor 0.410       0.646 ms                1.623 billionKV/s               75.902 %
+Load factor 0.440       0.641 ms                1.636 billionKV/s               76.508 %
+Load factor 0.470       0.643 ms                1.631 billionKV/s               76.265 %
+Load factor 0.500       0.643 ms                1.632 billionKV/s               76.325 %
+Load factor 0.530       0.642 ms                1.634 billionKV/s               76.447 %
+Load factor 0.560       0.645 ms                1.627 billionKV/s               76.083 %
+Load factor 0.590       0.645 ms                1.625 billionKV/s               76.023 %
+Load factor 0.620       0.644 ms                1.629 billionKV/s               76.204 %
+Load factor 0.650       0.645 ms                1.627 billionKV/s               76.083 %
+Load factor 0.680       0.640 ms                1.638 billionKV/s               76.631 %
+Load factor 0.710       0.644 ms                1.628 billionKV/s               76.143 %
+Load factor 0.740       0.641 ms                1.637 billionKV/s               76.569 %
+Load factor 0.770       0.642 ms                1.634 billionKV/s               76.447 %
+Load factor 0.800       0.641 ms                1.636 billionKV/s               76.508 %
+Load factor 0.830       0.642 ms                1.633 billionKV/s               76.386 %
+Load factor 0.860       0.638 ms                1.642 billionKV/s               76.815 %
+Load factor 0.890       0.641 ms                1.637 billionKV/s               76.569 %
+Load factor 0.920       0.643 ms                1.632 billionKV/s               76.325 %
+Load factor 0.950       0.640 ms                1.638 billionKV/s               76.631 %
+Load factor 0.980       0.644 ms                1.629 billionKV/s               76.204 %

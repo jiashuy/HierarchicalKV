@@ -48,8 +48,8 @@ A100 40G:　 1555  GB/s
 3090    :   936.2 GB/s
 */
 constexpr float PeakBW = 2039.0f;
-constexpr uint32_t REPEAT = 2;
-constexpr uint32_t WARMUP = 10;
+constexpr uint32_t REPEAT = 5;
+constexpr uint32_t WARMUP = 20;
 constexpr double EPSILON = 1e-3;
 constexpr int PRECISION = 3;
 constexpr TimeUnit tu = TimeUnit::MilliSecond;
@@ -339,13 +339,14 @@ float test_one_api(const API_Select api, TestDescriptor& td,
       //         table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
       //         d_keys, d_vectors, d_scores, d_found, key_num_per_op);
       //////////////////////////////////////////////////////////////////////////////////////
+      ///////////////////////////////// probing --------------------------------------
       //--------------------------- probing using single kernel ---------------------
       lookup_kernel_with_io_v2_kernel1<K, V, S>
           <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
               table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
               d_keys, values_addr, d_scores, d_found, key_num_per_op);
       timer.start();
-      ////////////////////////////////////////////--------------------------------------
+      ///////////////////////////////// copy value--------------------------------------
       //--------------------------- copy value using single kernel ---------------------
       // if (options.dim == 4) {
       //   lookup_kernel_with_io_v2_kernel2<K, V, S, 1, 0>
@@ -357,12 +358,22 @@ float test_one_api(const API_Select api, TestDescriptor& td,
       //         options.dim, d_vectors, values_addr, d_found, key_num_per_op);
       // }
       //--------------------------- copy values using test1 ---------------------
+      // if (options.dim == 4) {
+      //   lookup_kernel_with_io_v2_kernel2_test1<K, V, S, 1, 0>
+      //       <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //         options.dim, d_vectors, values_addr, d_found, key_num_per_op);
+      // } else if (options.dim == 128) {
+      //   lookup_kernel_with_io_v2_kernel2_test1<K, V, S, 32, 5>
+      //        <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //         options.dim, d_vectors, values_addr, d_found, key_num_per_op);
+      // }
+      //--------------------------- copy values using test2 ---------------------
       if (options.dim == 4) {
-        lookup_kernel_with_io_v2_kernel2_test1<K, V, S, 1, 0>
+        lookup_kernel_with_io_v2_kernel2_test2<K, V, S, 1, 0>
             <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
               options.dim, d_vectors, values_addr, d_found, key_num_per_op);
       } else if (options.dim == 128) {
-        lookup_kernel_with_io_v2_kernel2_test1<K, V, S, 32, 5>
+        lookup_kernel_with_io_v2_kernel2_test2<K, V, S, 32, 5>
              <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
               options.dim, d_vectors, values_addr, d_found, key_num_per_op);
       }
@@ -537,12 +548,28 @@ int main(int argc, char* argv[]) {
       //           << "Key = 64 bits \t"
       //           << "Value = 16 B\n";
       // test_by_discription(td);
+      // td.dim = 128;
+      // std::cout << "Capacity = 64 * 1024 * 1024 \t"
+      //           << "Batch = 1024 * 1024 \t"
+      //           << "Key = 64 bits \t"
+      //           << "Value = 512 B\n";
+      // test_by_discription(td);
+
       td.dim = 128;
-      std::cout << "Capacity = 64 * 1024 * 1024 \t"
-                << "Batch = 1024 * 1024 \t"
-                << "Key = 64 bits \t"
-                << "Value = 512 B\n";
-      test_by_discription(td);
+      for (int i = 0; i < WARMUP; i++) {
+        test_cudaMemcpyAsync<V>(td.dim * td.key_num_per_op);
+      }
+      for (int i = 0; i < 20; i++) {
+        std::vector<float> elapsed_time(REPEAT, 0.0f);
+        for (int i = 0; i < REPEAT; i++) {
+          elapsed_time.emplace_back(test_cudaMemcpyAsync<V>(td.dim * td.key_num_per_op));
+        }
+        float average_time = getAverage(elapsed_time);
+        float sol = td.getSOL(API_Select::find, average_time);
+        std::cout << "cudaMemcpyAsync's SOL: "
+                  << average_time << " ms \t\t" 
+                  << sol << " %\n"; 
+      }
     }
     CUDA_CHECK(cudaDeviceSynchronize());
   } catch (const nv::merlin::CudaException& e) {
