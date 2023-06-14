@@ -573,3 +573,270 @@ Load factor 0.890       0.641 ms                1.637 billionKV/s               
 Load factor 0.920       0.643 ms                1.632 billionKV/s               76.325 %
 Load factor 0.950       0.640 ms                1.638 billionKV/s               76.631 %
 Load factor 0.980       0.644 ms                1.629 billionKV/s               76.204 %
+
+
+================================================ Memcpy kernel Test ======================
+cudaMemcpyAsync's SOL: 0.696189 ms              70.4458 %
+cudaMemcpyAsync's SOL: 0.696266 ms              70.4381 %
+cudaMemcpyAsync's SOL: 0.696238 ms              70.4409 %
+cudaMemcpyAsync's SOL: 0.696504 ms              70.414 %
+cudaMemcpyAsync's SOL: 0.696138 ms              70.451 %
+cudaMemcpyAsync's SOL: 0.69611 ms               70.4539 %
+cudaMemcpyAsync's SOL: 0.696005 ms              70.4645 %
+cudaMemcpyAsync's SOL: 0.695982 ms              70.4668 %
+cudaMemcpyAsync's SOL: 0.696381 ms              70.4264 %
+cudaMemcpyAsync's SOL: 0.696097 ms              70.4552 %
+cudaMemcpyAsync's SOL: 0.696225 ms              70.4422 %
+cudaMemcpyAsync's SOL: 0.696215 ms              70.4432 %
+cudaMemcpyAsync's SOL: 0.696123 ms              70.4526 %
+cudaMemcpyAsync's SOL: 0.696077 ms              70.4572 %
+cudaMemcpyAsync's SOL: 0.696297 ms              70.435 %
+cudaMemcpyAsync's SOL: 0.69623 ms               70.4417 %
+cudaMemcpyAsync's SOL: 0.696013 ms              70.4637 %
+cudaMemcpyAsync's SOL: 0.696156 ms              70.4492 %
+cudaMemcpyAsync's SOL: 0.696059 ms              70.4591 %
+cudaMemcpyAsync's SOL: 0.696438 ms              70.4207 %
+
+
+=========== A thread copy a float4, memcpy_kernel1
+memcpy kernel's SOL: 0.643541 ms                76.2091 %
+memcpy kernel's SOL: 0.643466 ms                76.2179 %
+memcpy kernel's SOL: 0.643469 ms                76.2176 %
+memcpy kernel's SOL: 0.643397 ms                76.2261 %
+memcpy kernel's SOL: 0.643469 ms                76.2176 %
+memcpy kernel's SOL: 0.643448 ms                76.22 %
+memcpy kernel's SOL: 0.643548 ms                76.2082 %
+memcpy kernel's SOL: 0.643651 ms                76.1961 %
+memcpy kernel's SOL: 0.643515 ms                76.2121 %
+memcpy kernel's SOL: 0.643556 ms                76.2073 %
+memcpy kernel's SOL: 0.643333 ms                76.2337 %
+memcpy kernel's SOL: 0.643607 ms                76.2012 %
+memcpy kernel's SOL: 0.643625 ms                76.1991 %
+memcpy kernel's SOL: 0.643443 ms                76.2206 %
+memcpy kernel's SOL: 0.643448 ms                76.22 %
+memcpy kernel's SOL: 0.643553 ms                76.2076 %
+memcpy kernel's SOL: 0.643643 ms                76.197 %
+memcpy kernel's SOL: 0.64351 ms                 76.2127 %
+memcpy kernel's SOL: 0.643707 ms                76.1894 %
+memcpy kernel's SOL: 0.643464 ms                76.2182 %
+
+
+=========== A thread copy a float4, bypass cache, memcpy_kernel2
+memcpy kernel's SOL: 0.646794 ms                75.8257 %
+memcpy kernel's SOL: 0.646784 ms                75.8269 %
+memcpy kernel's SOL: 0.646848 ms                75.8194 %
+memcpy kernel's SOL: 0.646828 ms                75.8218 %
+memcpy kernel's SOL: 0.646853 ms                75.8188 %
+memcpy kernel's SOL: 0.646756 ms                75.8302 %
+memcpy kernel's SOL: 0.646666 ms                75.8407 %
+memcpy kernel's SOL: 0.64674 ms                 75.832 %
+memcpy kernel's SOL: 0.646687 ms                75.8383 %
+memcpy kernel's SOL: 0.646797 ms                75.8254 %
+memcpy kernel's SOL: 0.646856 ms                75.8185 %
+memcpy kernel's SOL: 0.646633 ms                75.8446 %
+memcpy kernel's SOL: 0.646861 ms                75.8179 %
+memcpy kernel's SOL: 0.646845 ms                75.8197 %
+memcpy kernel's SOL: 0.64681 ms                 75.8239 %
+memcpy kernel's SOL: 0.646694 ms                75.8374 %
+memcpy kernel's SOL: 0.646912 ms                75.8119 %
+memcpy kernel's SOL: 0.646876 ms                75.8161 %
+memcpy kernel's SOL: 0.646602 ms                75.8482 %
+memcpy kernel's SOL: 0.646853 ms                75.8188 %
+
+=========== A group copy for `TIMES` times, with every thread copy a float4 per operation, memcpy_kernel3
+
+memcpy kernel's SOL: 0.669356 ms                73.2699 %
+memcpy kernel's SOL: 0.66974 ms                 73.2279 %
+memcpy kernel's SOL: 0.669571 ms                73.2464 %
+memcpy kernel's SOL: 0.668419 ms                73.3727 %
+memcpy kernel's SOL: 0.668616 ms                73.351 %
+memcpy kernel's SOL: 0.670692 ms                73.124 %
+memcpy kernel's SOL: 0.669847 ms                73.2162 %
+memcpy kernel's SOL: 0.669593 ms                73.2439 %
+memcpy kernel's SOL: 0.668867 ms                73.3235 %
+memcpy kernel's SOL: 0.670549 ms                73.1396 %
+memcpy kernel's SOL: 0.669663 ms                73.2364 %
+memcpy kernel's SOL: 0.669517 ms                73.2523 %
+memcpy kernel's SOL: 0.669926 ms                73.2075 %
+memcpy kernel's SOL: 0.669724 ms                73.2296 %
+memcpy kernel's SOL: 0.669934 ms                73.2067 %
+memcpy kernel's SOL: 0.669839 ms                73.217 %
+memcpy kernel's SOL: 0.670062 ms                73.1927 %
+memcpy kernel's SOL: 0.669868 ms                73.2139 %
+memcpy kernel's SOL: 0.670121 ms                73.1863 %
+memcpy kernel's SOL: 0.669619 ms                73.2411 %
+
+
+=========== memcpy_kernel4: async copy, A group copy for `TIMES` times, with every thread copy a float4 per operation
+memcpy kernel's SOL: 0.675274 ms                72.6278 %
+memcpy kernel's SOL: 0.675507 ms                72.6027 %
+memcpy kernel's SOL: 0.675093 ms                72.6473 %
+memcpy kernel's SOL: 0.675797 ms                72.5716 %
+memcpy kernel's SOL: 0.675466 ms                72.6071 %
+memcpy kernel's SOL: 0.676111 ms                72.5378 %
+memcpy kernel's SOL: 0.674834 ms                72.6751 %
+memcpy kernel's SOL: 0.675372 ms                72.6173 %
+memcpy kernel's SOL: 0.675331 ms                72.6217 %
+memcpy kernel's SOL: 0.675983 ms                72.5516 %
+memcpy kernel's SOL: 0.675694 ms                72.5826 %
+memcpy kernel's SOL: 0.674757 ms                72.6834 %
+memcpy kernel's SOL: 0.675471 ms                72.6066 %
+memcpy kernel's SOL: 0.675546 ms                72.5986 %
+memcpy kernel's SOL: 0.675013 ms                72.6558 %
+memcpy kernel's SOL: 0.674647 ms                72.6953 %
+memcpy kernel's SOL: 0.674819 ms                72.6768 %
+memcpy kernel's SOL: 0.675185 ms                72.6374 %
+memcpy kernel's SOL: 0.675044 ms                72.6525 %
+memcpy kernel's SOL: 0.675164 ms                72.6396 %
+
+
+================================================ Memcpy group Test ======================
+=== group 32
+memcpy kernel's SOL: 0.669356 ms                73.2699 %
+memcpy kernel's SOL: 0.66974 ms                 73.2279 %
+memcpy kernel's SOL: 0.669571 ms                73.2464 %
+memcpy kernel's SOL: 0.668419 ms                73.3727 %
+memcpy kernel's SOL: 0.668616 ms                73.351 %
+memcpy kernel's SOL: 0.670692 ms                73.124 %
+memcpy kernel's SOL: 0.669847 ms                73.2162 %
+memcpy kernel's SOL: 0.669593 ms                73.2439 %
+memcpy kernel's SOL: 0.668867 ms                73.3235 %
+memcpy kernel's SOL: 0.670549 ms                73.1396 %
+memcpy kernel's SOL: 0.669663 ms                73.2364 %
+memcpy kernel's SOL: 0.669517 ms                73.2523 %
+memcpy kernel's SOL: 0.669926 ms                73.2075 %
+memcpy kernel's SOL: 0.669724 ms                73.2296 %
+memcpy kernel's SOL: 0.669934 ms                73.2067 %
+memcpy kernel's SOL: 0.669839 ms                73.217 %
+memcpy kernel's SOL: 0.670062 ms                73.1927 %
+memcpy kernel's SOL: 0.669868 ms                73.2139 %
+memcpy kernel's SOL: 0.670121 ms                73.1863 %
+memcpy kernel's SOL: 0.669619 ms                73.2411 %
+
+=== group 16
+
+memcpy kernel's SOL: 0.661376 ms                74.154 %
+memcpy kernel's SOL: 0.661015 ms                74.1945 %
+memcpy kernel's SOL: 0.661701 ms                74.1175 %
+memcpy kernel's SOL: 0.661461 ms                74.1445 %
+memcpy kernel's SOL: 0.661389 ms                74.1525 %
+memcpy kernel's SOL: 0.661343 ms                74.1577 %
+memcpy kernel's SOL: 0.661409 ms                74.1502 %
+memcpy kernel's SOL: 0.661414 ms                74.1497 %
+memcpy kernel's SOL: 0.661276 ms                74.1652 %
+memcpy kernel's SOL: 0.66113 ms                 74.1815 %
+memcpy kernel's SOL: 0.661473 ms                74.143 %
+memcpy kernel's SOL: 0.661281 ms                74.1646 %
+memcpy kernel's SOL: 0.661066 ms                74.1887 %
+memcpy kernel's SOL: 0.661176 ms                74.1764 %
+memcpy kernel's SOL: 0.661353 ms                74.1565 %
+memcpy kernel's SOL: 0.661673 ms                74.1207 %
+memcpy kernel's SOL: 0.661338 ms                74.1583 %
+memcpy kernel's SOL: 0.661279 ms                74.1649 %
+memcpy kernel's SOL: 0.661384 ms                74.1531 %
+memcpy kernel's SOL: 0.661279 ms                74.1649 %
+
+=== group 8
+
+memcpy kernel's SOL: 0.759101 ms                64.6075 %
+memcpy kernel's SOL: 0.75861 ms                 64.6494 %
+memcpy kernel's SOL: 0.758697 ms                64.6419 %
+memcpy kernel's SOL: 0.758426 ms                64.6651 %
+memcpy kernel's SOL: 0.758556 ms                64.6539 %
+memcpy kernel's SOL: 0.758121 ms                64.6911 %
+memcpy kernel's SOL: 0.75829 ms                 64.6767 %
+memcpy kernel's SOL: 0.76023 ms                 64.5116 %
+memcpy kernel's SOL: 0.758531 ms                64.6561 %
+memcpy kernel's SOL: 0.758551 ms                64.6544 %
+memcpy kernel's SOL: 0.758149 ms                64.6887 %
+memcpy kernel's SOL: 0.75947 ms                 64.5761 %
+memcpy kernel's SOL: 0.758961 ms                64.6195 %
+memcpy kernel's SOL: 0.758769 ms                64.6358 %
+memcpy kernel's SOL: 0.758285 ms                64.6771 %
+memcpy kernel's SOL: 0.759711 ms                64.5557 %
+memcpy kernel's SOL: 0.758876 ms                64.6267 %
+memcpy kernel's SOL: 0.759012 ms                64.6151 %
+memcpy kernel's SOL: 0.758569 ms                64.6528 %
+memcpy kernel's SOL: 0.759532 ms                64.5709 %
+
+== group 4
+memcpy kernel's SOL: 0.857459 ms                57.1965 %
+memcpy kernel's SOL: 0.855227 ms                57.3458 %
+memcpy kernel's SOL: 0.857047 ms                57.224 %
+memcpy kernel's SOL: 0.858486 ms                57.1281 %
+memcpy kernel's SOL: 0.857042 ms                57.2243 %
+memcpy kernel's SOL: 0.854456 ms                57.3975 %
+memcpy kernel's SOL: 0.856067 ms                57.2895 %
+memcpy kernel's SOL: 0.858048 ms                57.1572 %
+memcpy kernel's SOL: 0.85548 ms                 57.3288 %
+memcpy kernel's SOL: 0.856643 ms                57.251 %
+memcpy kernel's SOL: 0.858619 ms                57.1192 %
+memcpy kernel's SOL: 0.85547 ms                 57.3295 %
+memcpy kernel's SOL: 0.85728 ms                 57.2084 %
+memcpy kernel's SOL: 0.855647 ms                57.3176 %
+memcpy kernel's SOL: 0.858852 ms                57.1037 %
+memcpy kernel's SOL: 0.855892 ms                57.3012 %
+memcpy kernel's SOL: 0.859359 ms                57.0701 %
+memcpy kernel's SOL: 0.857098 ms                57.2206 %
+memcpy kernel's SOL: 0.857764 ms                57.1762 %
+memcpy kernel's SOL: 0.855355 ms                57.3372 %
+
+============================================= probing test =============================
+
+=== lookup_kernel_with_io_v2_kernel1_cellect_probing_times
+Capacity = 64 * 1024 * 1024     Batch = 1024 * 1024     Key = 64 bits   Value = 16 B
+Loop number for init : 64
+Load factor : 0.999
+Hit rate : 1.000
+Found keys : 1048576
+Correct value : 1048576
+Load factor 0.020       Probing <size> AVG 8.099        <num> AVG 1.012       <num> MAX 5     <num> MIN 1
+Load factor 0.050       Probing <size> AVG 8.361        <num> AVG 1.045       <num> MAX 6     <num> MIN 1
+Load factor 0.080       Probing <size> AVG 8.649        <num> AVG 1.081       <num> MAX 7     <num> MIN 1
+Load factor 0.110       Probing <size> AVG 8.964        <num> AVG 1.120       <num> MAX 8     <num> MIN 1
+Load factor 0.140       Probing <size> AVG 9.312        <num> AVG 1.164       <num> MAX 11    <num> MIN 1
+Load factor 0.170       Probing <size> AVG 9.702        <num> AVG 1.213       <num> MAX 11    <num> MIN 1
+Load factor 0.200       Probing <size> AVG 10.128       <num> AVG 1.266       <num> MAX 13    <num> MIN 1
+Load factor 0.230       Probing <size> AVG 10.623       <num> AVG 1.328       <num> MAX 20    <num> MIN 1
+Load factor 0.260       Probing <size> AVG 11.158       <num> AVG 1.395       <num> MAX 17    <num> MIN 1
+Load factor 0.290       Probing <size> AVG 11.766       <num> AVG 1.471       <num> MAX 19    <num> MIN 1
+Load factor 0.320       Probing <size> AVG 12.458       <num> AVG 1.557       <num> MAX 24    <num> MIN 1
+Load factor 0.350       Probing <size> AVG 13.256       <num> AVG 1.657       <num> MAX 25    <num> MIN 1
+Load factor 0.380       Probing <size> AVG 14.149       <num> AVG 1.769       <num> MAX 30    <num> MIN 1
+Load factor 0.410       Probing <size> AVG 15.194       <num> AVG 1.899       <num> MAX 35    <num> MIN 1
+Load factor 0.440       Probing <size> AVG 16.417       <num> AVG 2.052       <num> MAX 40    <num> MIN 1
+Load factor 0.470       Probing <size> AVG 17.829       <num> AVG 2.229       <num> MAX 43    <num> MIN 1
+Load factor 0.500       Probing <size> AVG 19.515       <num> AVG 2.439       <num> MAX 53    <num> MIN 1
+Load factor 0.530       Probing <size> AVG 21.529       <num> AVG 2.691       <num> MAX 57    <num> MIN 1
+Load factor 0.560       Probing <size> AVG 23.888       <num> AVG 2.986       <num> MAX 61    <num> MIN 1
+Load factor 0.590       Probing <size> AVG 26.903       <num> AVG 3.363       <num> MAX 87    <num> MIN 1
+Load factor 0.620       Probing <size> AVG 30.597       <num> AVG 3.825       <num> MAX 92    <num> MIN 1
+Load factor 0.650       Probing <size> AVG 35.221       <num> AVG 4.403       <num> MAX 112   <num> MIN 1
+Load factor 0.680       Probing <size> AVG 41.191       <num> AVG 5.149       <num> MAX 125   <num> MIN 1
+Load factor 0.710       Probing <size> AVG 49.125       <num> AVG 6.141       <num> MAX 127   <num> MIN 1
+Load factor 0.740       Probing <size> AVG 59.716       <num> AVG 7.465       <num> MAX 128   <num> MIN 1
+Load factor 0.770       Probing <size> AVG 74.040       <num> AVG 9.255       <num> MAX 128   <num> MIN 1
+Load factor 0.800       Probing <size> AVG 94.085       <num> AVG 11.761      <num> MAX 128   <num> MIN 1
+Load factor 0.830       Probing <size> AVG 120.808      <num> AVG 15.101      <num> MAX 128   <num> MIN 1
+Load factor 0.860       Probing <size> AVG 157.887      <num> AVG 19.736      <num> MAX 128   <num> MIN 1
+Load factor 0.890       Probing <size> AVG 205.734      <num> AVG 25.717      <num> MAX 128   <num> MIN 1
+Load factor 0.920       Probing <size> AVG 264.200      <num> AVG 33.025      <num> MAX 128   <num> MIN 1
+Load factor 0.950       Probing <size> AVG 339.855      <num> AVG 42.482      <num> MAX 128   <num> MIN 1
+Load factor 0.980       Probing <size> AVG 425.728      <num> AVG 53.216      <num> MAX 128   <num> MIN 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -80,6 +80,7 @@ __global__ void upsert_kernel_with_io_core(
                               dim);
     if (g.thread_rank() == src_lane) {
       update_score(bucket, key_pos, scores, key_idx);
+      bucket->digests_16[key_pos] = get_digest_16<K>(insert_key);
       bucket->digests(key_pos)[0] = get_digest<K>(insert_key);
       (bucket->keys(key_pos))
           ->store(insert_key, cuda::std::memory_order_relaxed);

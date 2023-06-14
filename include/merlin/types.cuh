@@ -60,6 +60,7 @@ struct Bucket {
   AtomicScore<S>* scores_;
   /// @brief not visible to users
   uint8_t* digests_;
+  uint16_t* digests_16;
   V* vectors;  // Pinned memory or HBM
 
   /* For upsert_kernel without user specified scores

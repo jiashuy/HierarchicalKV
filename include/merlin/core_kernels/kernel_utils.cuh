@@ -49,6 +49,12 @@ __forceinline__ __device__ uint8_t get_digest(const K& key) {
   return static_cast<uint8_t>(hashed_key >> 32);
 }
 
+template <typename K>
+__forceinline__ __device__ uint16_t get_digest_16(const K& key) {
+  const K hashed_key = Murmur3HashDevice(key);
+  return static_cast<uint16_t>(hashed_key >> 32);
+}
+
 template <typename S, typename K, int BUCKET_SIZE = 128>
 struct CopyScoreEmpty {
   __forceinline__ __device__ static S* get_base_ptr(K** keys_ptr, int offset) {

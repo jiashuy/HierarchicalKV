@@ -30,6 +30,11 @@
 #include "merlin_hashtable.cuh"
 #include "explore_kernels/lookup_v1.cuh"
 #include "explore_kernels/lookup_v2.cuh"
+#include "explore_kernels/lookup_v3.cuh"
+#include "explore_kernels/lookup_v4.cuh"
+
+// #define COLLECT_PROBING_SIZE
+#define PERF
 
 using namespace nv::merlin;
 using namespace benchmark;
@@ -48,8 +53,8 @@ A100 40G:　 1555  GB/s
 3090    :   936.2 GB/s
 */
 constexpr float PeakBW = 2039.0f;
-constexpr uint32_t REPEAT = 5;
-constexpr uint32_t WARMUP = 20;
+constexpr uint32_t REPEAT = 1;
+constexpr uint32_t WARMUP = 1;
 constexpr double EPSILON = 1e-3;
 constexpr int PRECISION = 3;
 constexpr TimeUnit tu = TimeUnit::MilliSecond;
@@ -153,6 +158,77 @@ struct TestDescriptor_ {
   }
 };
 using TestDescriptor = TestDescriptor_<K, V, S>;
+
+static double probing_size_avg = 0.0;
+static double probing_num_avg = 0.0;
+static int probing_num_max = 0;
+static int probing_num_min = 0;
+template<typename K, typename V, typename S>
+void test_probing_size(size_t n, const cudaStream_t& stream, TableCore_* table_core, int dim,
+                       K* d_keys, V** values_addr, S* d_scores, bool* d_founds) {
+  int* times_dev;
+  int* times_host = (int*)malloc(sizeof(int) * n);
+  cudaMalloc(&(times_dev), sizeof(int) * n);
+  cudaMemset(times_dev, 0, n * sizeof(int));
+
+  // lookup_kernel_with_io_v2_kernel1_cellect_probing_times<K, V, S> 
+  //   <<<n / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+  //     table_core->buckets, table_core->buckets_num, dim,
+  //     d_keys, values_addr, d_scores, d_founds, n, times_dev);
+  /////////////////////////////////////////////////////////////////////////
+  // lookup_kernel_with_io_v3_kernel1_cellect_probing_times<K, V, S> 
+  //   <<<n / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+  //     table_core->buckets, table_core->buckets_num, dim,
+  //     d_keys, values_addr, d_scores, d_founds, n, times_dev);
+  /////////////////////////////////////////////////////////////////////////
+  // lookup_kernel_with_io_v3_kernel2_cellect_probing_times<K, V, S> 
+  //   <<<n / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+  //     table_core->buckets, table_core->buckets_num, dim,
+  //     d_keys, values_addr, d_scores, d_founds, n, times_dev);
+  /////////////////////////////////////////////////////////////////////////
+  lookup_kernel_with_io_v3_kernel1_cellect_conflict_times<K, V, S>
+    <<<n / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      table_core->buckets, table_core->buckets_num, dim,
+      d_keys, values_addr, d_scores, d_founds, n, times_dev);
+  /////////////////////////////////////////////////////////////////////////
+
+  cudaMemcpy(times_host, times_dev, sizeof(int) * n, cudaMemcpyDeviceToHost);
+#if defined(COLLECT_PROBING_SIZE)
+  size_t sum = 0;
+  probing_num_max = 0;
+  probing_num_min = 129;
+  for (int i = 0; i < n; i++) {
+    sum += times_host[i];
+    if (probing_num_max < times_host[i]) probing_num_max = times_host[i];
+    if (probing_num_min > times_host[i]) probing_num_min = times_host[i];
+  }
+  sum *= sizeof(K);
+  probing_size_avg = static_cast<double>(sum) / n;
+  probing_num_avg = probing_size_avg / sizeof(K);
+#else
+  static bool tested = false;
+  if (!tested) {
+    tested = true;
+
+    std::vector<int> conflict_frequency(100, 0);
+    for (int i = 0; i < n; i++) {
+      conflict_frequency[times_host[i]] += 1;
+    }
+    int end = 99;
+    for (int i = 99; i >=0; i--) {
+      if (conflict_frequency[i] != 0) break;
+      end = i;
+    }
+    end = end < 32 ? 32 : end;
+    for (int i = 0; i < end; i++) {
+      std::cout << "conflict times " << i << "\t"
+                << "frequency " << conflict_frequency[i] << std::endl;
+    }
+  }
+#endif
+  CUDA_CHECK(cudaFree(times_dev));
+  free(times_host);
+}
 
 float test_one_api(const API_Select api, TestDescriptor& td,
                   bool sample_hit_rate = false, bool silence = true, bool check_correctness = false) {
@@ -330,23 +406,64 @@ float test_one_api(const API_Select api, TestDescriptor& td,
   cudaProfilerStart();
   switch (api) {
     case API_Select::find: {
-      // timer.start();
+      timer.start();
       //////////////////////////////////////////////////////////////////////////////////////
-      // table->find(key_num_per_op, d_keys, d_vectors, d_found, nullptr, stream);
+      // table->find(key_num_per_op, d_keys, d_vectors, d_found, d_scores, stream);
+      /////--------------------------------------------------------------------------------
+      // using CopyScore = CopyScoreByPassCache<S, K, 128>;
+      using CopyScore = CopyScoreEmpty<S, K, 128>;
+      if (options.dim == 4) {
+        using CopyValue = CopyValueOneGroup<float, float4, 16>;
+        lookup_kernel_with_io_pipeline_v2<K, float, S, CopyScore, CopyValue, 128>
+            <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+                table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+                d_keys, d_vectors, d_scores, d_found, key_num_per_op);
+      } else if (options.dim == 128) {
+        using CopyValue = CopyValueTwoGroup<float, float4, 16>;
+        lookup_kernel_with_io_pipeline_v2<K, float, S, CopyScore, CopyValue, 128>
+            <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+                table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+                d_keys, d_vectors, d_scores, d_found, key_num_per_op);
+      }
       //////////////////////////////////////////////////////////////////////////////////////
       // lookup_kernel_with_io_v1<K, V, S>
       //     <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
       //         table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
       //         d_keys, d_vectors, d_scores, d_found, key_num_per_op);
+
       //////////////////////////////////////////////////////////////////////////////////////
       ///////////////////////////////// probing --------------------------------------
       //--------------------------- probing using single kernel ---------------------
-      lookup_kernel_with_io_v2_kernel1<K, V, S>
-          <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
-              table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
-              d_keys, values_addr, d_scores, d_found, key_num_per_op);
-      timer.start();
+      // lookup_kernel_with_io_v2_kernel1<K, V, S>
+      //     <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //         table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //         d_keys, values_addr, d_scores, d_found, key_num_per_op);
+      //------------------ probing using 8 bits digests(load uint4 every time)------------
+      // lookup_kernel_with_io_v3_kernel1<K, V, S>
+      //     <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //         table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //         d_keys, values_addr, d_scores, d_found, key_num_per_op);
+      //-------------------probing using 16 bits digests(load uint4 every time) -----------
+      // lookup_kernel_with_io_v3_kernel2<K, V, S>
+      //     <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //         table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //         d_keys, values_addr, d_scores, d_found, key_num_per_op);
+      //--------------- probing using 8 bits digests(load 8 bits every time) --------------
+      // lookup_kernel_with_io_v3_kernel3<K, V, S>
+      //     <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //         table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //         d_keys, values_addr, d_scores, d_found, key_num_per_op);
+      //--------------- probing using 8 bits digests(load 32 bits every time) --------------
+      // lookup_kernel_with_io_v3_kernel4<K, V, S>
+      //     <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //         table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //         d_keys, values_addr, d_scores, d_found, key_num_per_op);
+
+      //--------------------------- Test Probing size  ---------------------
+      // test_probing_size<K, V, S>(key_num_per_op, stream, table_core, options.dim, 
+      //                            d_keys, values_addr, d_scores, d_found);
       ///////////////////////////////// copy value--------------------------------------
+      // timer.start();
       //--------------------------- copy value using single kernel ---------------------
       // if (options.dim == 4) {
       //   lookup_kernel_with_io_v2_kernel2<K, V, S, 1, 0>
@@ -368,15 +485,39 @@ float test_one_api(const API_Select api, TestDescriptor& td,
       //         options.dim, d_vectors, values_addr, d_found, key_num_per_op);
       // }
       //--------------------------- copy values using test2 ---------------------
-      if (options.dim == 4) {
-        lookup_kernel_with_io_v2_kernel2_test2<K, V, S, 1, 0>
-            <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
-              options.dim, d_vectors, values_addr, d_found, key_num_per_op);
-      } else if (options.dim == 128) {
-        lookup_kernel_with_io_v2_kernel2_test2<K, V, S, 32, 5>
-             <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
-              options.dim, d_vectors, values_addr, d_found, key_num_per_op);
-      }
+      // if (check_correctness) {
+      //   if (options.dim == 4) {
+      //     lookup_kernel_with_io_v2_kernel2_test2<K, V, S, 1, 0>
+      //         <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //           options.dim, d_vectors, values_addr, d_found, key_num_per_op);
+      //   } else if (options.dim == 128) {
+      //     lookup_kernel_with_io_v2_kernel2_test2<K, V, S, 32, 5>
+      //         <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //           options.dim, d_vectors, values_addr, d_found, key_num_per_op);
+      //   }
+      // }
+      //////////////////////////////////////////////////////////////////////////////////////
+      // if (options.dim == 4) 
+      //   lookup_kernel_with_io_v4_1<K, V, S, 1>
+      //       <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //           table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //           d_keys, d_vectors, d_scores, d_found, key_num_per_op);
+      // else if (options.dim == 128)
+      //   lookup_kernel_with_io_v4_1<K, V, S, 16>
+      //       <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //           table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //           d_keys, d_vectors, d_scores, d_found, key_num_per_op);
+      //////////////////////////////////////////////////////////////////////////////////////
+      // if (options.dim == 4) 
+      //   lookup_kernel_with_io_v4_2<K, V, S, 1, 4>
+      //       <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //           table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //           d_keys, d_vectors, d_scores, d_found, key_num_per_op);
+      // else if (options.dim == 128)
+      //   lookup_kernel_with_io_v4_2<K, V, S, 32, 128>
+      //       <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //           table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //           d_keys, d_vectors, d_scores, d_found, key_num_per_op);
       //////////////////////////////////////////////////////////////////////////////////////
 
       CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -511,6 +652,7 @@ Rep getAverage(const std::vector<Rep>& arrs) {
 
 void test_by_discription(TestDescriptor& td) {
   // Check correctness
+  td.load_factor = 0.02f;
   test_one_api(API_Select::find, td, true, false, true);
   // Warpup
   for (int i = 0; i < WARMUP; i++) {
@@ -525,9 +667,53 @@ void test_by_discription(TestDescriptor& td) {
     float average_time = getAverage(elapsed_time);
     float tput = billionKVPerSecond(average_time, td.key_num_per_op);
     float sol = td.getSOL(API_Select::find, average_time);
+  
+#if defined(COLLECT_PROBING_SIZE)
+    std::cout << "Load factor " << lf << "\t" 
+              << "Probing <size> AVG " << probing_size_avg << "\t"
+              << "<num> AVG " << probing_num_avg  << "\t "
+              << "<num> MAX " << probing_num_max  << "\t "
+              << "<num> MIN " << probing_num_min <<  std::endl;
+#elif defined(PERF)
     std::cout << "Load factor " << lf << "\t"
               << average_time << " ms \t\t" 
               << tput << " billionKV/s \t\t" 
+              << sol << " %\n"; 
+#else
+#endif
+  }
+}
+
+void test_cudaMemcpyAsync(const TestDescriptor& td) {
+  for (int i = 0; i < WARMUP; i++) {
+    test_cudaMemcpyAsync<V, REPEAT>(td.dim * td.key_num_per_op);
+  }
+  for (int i = 0; i < 20; i++) {
+    std::vector<float> elapsed_time(REPEAT, 0.0f);
+    for (int i = 0; i < REPEAT; i++) {
+      elapsed_time.emplace_back(test_cudaMemcpyAsync<V, REPEAT>(td.dim * td.key_num_per_op));
+    }
+    float average_time = getAverage(elapsed_time);
+    float sol = td.getSOL(API_Select::find, average_time);
+    std::cout << "cudaMemcpyAsync's SOL: "
+              << average_time << " ms \t\t" 
+              << sol << " %\n"; 
+  }
+}
+
+void test_memcpy_kernel(const TestDescriptor& td) {
+  for (int i = 0; i < WARMUP; i++) {
+    test_memcpy_kernel<V, REPEAT>(td.dim * td.key_num_per_op);
+  }
+  for (int i = 0; i < 20; i++) {
+    std::vector<float> elapsed_time(REPEAT, 0.0f);
+    for (int i = 0; i < REPEAT; i++) {
+      elapsed_time.emplace_back(test_memcpy_kernel<V, REPEAT>(td.dim * td.key_num_per_op));
+    }
+    float average_time = getAverage(elapsed_time);
+    float sol = td.getSOL(API_Select::find, average_time);
+    std::cout << "memcpy kernel's SOL: "
+              << average_time << " ms \t\t" 
               << sol << " %\n"; 
   }
 }
@@ -542,34 +728,23 @@ int main(int argc, char* argv[]) {
       td.hit_rate = 1.0f;
       td.hit_mode = Hit_Mode::last_insert;
 
-      // td.dim = 4;
-      // std::cout << "Capacity = 64 * 1024 * 1024 \t"
-      //           << "Batch = 1024 * 1024 \t"
-      //           << "Key = 64 bits \t"
-      //           << "Value = 16 B\n";
-      // test_by_discription(td);
-      // td.dim = 128;
-      // std::cout << "Capacity = 64 * 1024 * 1024 \t"
-      //           << "Batch = 1024 * 1024 \t"
-      //           << "Key = 64 bits \t"
-      //           << "Value = 512 B\n";
-      // test_by_discription(td);
+      td.dim = 4;
+      std::cout << "Capacity = 64 * 1024 * 1024 \t"
+                << "Batch = 1024 * 1024 \t"
+                << "Key = 64 bits \t"
+                << "Value = 16 B\n";
+      test_by_discription(td);
 
       td.dim = 128;
-      for (int i = 0; i < WARMUP; i++) {
-        test_cudaMemcpyAsync<V>(td.dim * td.key_num_per_op);
-      }
-      for (int i = 0; i < 20; i++) {
-        std::vector<float> elapsed_time(REPEAT, 0.0f);
-        for (int i = 0; i < REPEAT; i++) {
-          elapsed_time.emplace_back(test_cudaMemcpyAsync<V>(td.dim * td.key_num_per_op));
-        }
-        float average_time = getAverage(elapsed_time);
-        float sol = td.getSOL(API_Select::find, average_time);
-        std::cout << "cudaMemcpyAsync's SOL: "
-                  << average_time << " ms \t\t" 
-                  << sol << " %\n"; 
-      }
+      std::cout << "Capacity = 64 * 1024 * 1024 \t"
+                << "Batch = 1024 * 1024 \t"
+                << "Key = 64 bits \t"
+                << "Value = 512 B\n";
+      test_by_discription(td);
+
+      // td.dim = 128;
+      // test_cudaMemcpyAsync(td);
+      // test_memcpy_kernel(td);
     }
     CUDA_CHECK(cudaDeviceSynchronize());
   } catch (const nv::merlin::CudaException& e) {

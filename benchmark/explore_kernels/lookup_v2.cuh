@@ -47,6 +47,55 @@ __global__ void lookup_kernel_with_io_v2_kernel1(
   }
 }
 
+
+//kernel_1 find address, kernel_2 copy value
+template <class K, class V, class S>
+__global__ void lookup_kernel_with_io_v2_kernel1_cellect_probing_times(
+    Bucket<K, V, S>* buckets, const size_t buckets_num, const int dim,
+    const K* __restrict keys, V** __restrict values_addr, S* __restrict scores,
+    bool* __restrict founds, const size_t n, int* times) {
+    
+  constexpr int BUCKET_SIZE = 128;
+
+  int key_idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (key_idx >= n) return;
+
+  K find_key = keys[key_idx];
+  K hashed_key = Murmur3HashDevice(find_key);
+  size_t global_idx = hashed_key % (buckets_num * BUCKET_SIZE);
+  size_t bkt_idx = global_idx / BUCKET_SIZE;
+  size_t start_idx = global_idx % BUCKET_SIZE;
+  Bucket<K, V, S>* bucket = buckets + bkt_idx;
+  K* keys_addr = reinterpret_cast<K*>(const_cast<AtomicKey<K>*>(bucket->keys(0)));
+  S* scores_addr = reinterpret_cast<S*>(keys_addr + BUCKET_SIZE);
+  V* values_addr_bucket = bucket->vectors;
+
+  int key_pos = -1;
+  uint32_t tile_offset = 0;
+
+  for (tile_offset = 0; tile_offset < BUCKET_SIZE; tile_offset += 1) {
+
+    key_pos =
+        (start_idx + tile_offset) & (BUCKET_SIZE - 1);
+    K current_key = keys_addr[key_pos];
+
+    if (find_key == current_key) {
+      values_addr[key_idx] = values_addr_bucket + key_pos * dim;
+      founds[key_idx] = true;
+      if (scores != nullptr) {
+        scores[key_idx] = scores_addr[key_pos];
+      }
+      times[key_idx] = tile_offset + 1;
+      return;
+    } else if (current_key == static_cast<K>(EMPTY_KEY)) {
+      founds[key_idx] = false;
+      times[key_idx] = tile_offset + 1;
+      return;
+    }
+  }
+  times[key_idx] = tile_offset + 1;
+}
+
 // A GROUP copy a value
 template <class K, class V, class S, 
           int32_t GROUP_SIZE = 32, int32_t MASK_WIDTH = 5>
@@ -148,7 +197,7 @@ __global__ void lookup_kernel_with_io_v2_kernel2_test2(
 }
 
 // Test Runtime API : cudaMemcpyAsync, contrast test
-template<typename V>
+template<typename V, int REPEAT>
 float test_cudaMemcpyAsync(const size_t LEN) {
   V *dev_src, *dev_dst;
   float time;
@@ -158,7 +207,10 @@ float test_cudaMemcpyAsync(const size_t LEN) {
   CUDA_CHECK(cudaEventCreate(&start));
   CUDA_CHECK(cudaEventCreate(&stop));
   CUDA_CHECK(cudaEventRecord(start));
-  CUDA_CHECK(cudaMemcpyAsync(dev_dst, dev_src, LEN * sizeof(V), cudaMemcpyDeviceToDevice));
+  #pragma unroll
+  for (int i = 0; i < REPEAT; i++) {
+    CUDA_CHECK(cudaMemcpyAsync(dev_dst, dev_src, LEN * sizeof(V), cudaMemcpyDeviceToDevice));
+  }
   CUDA_CHECK(cudaEventRecord(stop));
   CUDA_CHECK(cudaEventSynchronize(stop));
   CUDA_CHECK(cudaEventElapsedTime(&time, start, stop));
@@ -166,5 +218,158 @@ float test_cudaMemcpyAsync(const size_t LEN) {
   CUDA_CHECK(cudaEventDestroy(stop));
   CUDA_CHECK(cudaFree(dev_src));
   CUDA_CHECK(cudaFree(dev_dst));  
-  return time;
+  return static_cast<float>(time / REPEAT);
+}
+
+// A thread copy a float4
+__global__ void memcpy_kernel1(float* dst, float* src, size_t N) {
+  size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int offset = tid * 4;
+  if (offset < N) 
+    FETCH_FLOAT4(dst[offset]) = FETCH_FLOAT4(src[offset]);
+}
+
+// A thread copy a float4, bypass cache
+__global__ void memcpy_kernel2(float* dst, float* src, size_t N) {
+  constexpr int BLOCK_SIZE = 128;
+  size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  __shared__ float sm_buffer[BLOCK_SIZE * 4];
+  int offset = tid * 4;
+  if (offset < N) {
+    __pipeline_memcpy_async(sm_buffer + threadIdx.x * 4, 
+                            src + offset,
+                            sizeof(float4));
+    __pipeline_commit();
+    __pipeline_wait_prior(0);
+    float4 value_ = FETCH_FLOAT4(sm_buffer[threadIdx.x * 4]);
+    __stwt(reinterpret_cast<float4*>(dst + offset), value_);
+  }
+}
+
+// A group copy for `TIMES` times, with every thread copy a float4 per operation
+template<int GROUP_SIZE = 32, int TIMES = GROUP_SIZE>
+__global__ void memcpy_kernel3(float* dst, float* src, size_t N) {
+  constexpr int LOOP_STRIDE = GROUP_SIZE * 4;
+  constexpr int GROUP_STRIDE = LOOP_STRIDE * TIMES;
+
+  static_assert(GROUP_STRIDE == GROUP_SIZE * 128);
+
+  size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int groupID = tid / GROUP_SIZE;
+  int groupBase = groupID * GROUP_STRIDE;
+  if (groupBase >= N) return;
+  int rank = tid % GROUP_SIZE;
+
+  for (int i = 0; i < TIMES; i++) {
+    float* v_dst = dst + (groupBase + i * LOOP_STRIDE);
+    float* v_src = src + (groupBase + i * LOOP_STRIDE);
+    FETCH_FLOAT4(v_dst[rank * 4]) = FETCH_FLOAT4(v_src[rank * 4]);
+  }
+}
+
+// A group copy for `TIMES` times, with every thread copy a float4 per operation
+// Aync Copy
+template<int GROUP_SIZE = 32, int TIMES = GROUP_SIZE>
+__global__ void memcpy_kernel4(float* dst, float* src, size_t N) {
+  constexpr int BLOCK_SIZE = 128;
+  constexpr int LOOP_STRIDE = GROUP_SIZE * 4;
+  constexpr int GROUP_STRIDE = LOOP_STRIDE * TIMES;
+  constexpr int GROUP_NUM = BLOCK_SIZE / GROUP_SIZE;
+
+  static_assert(GROUP_STRIDE == GROUP_SIZE * 128);
+
+  __shared__ float sm_buffer[2][GROUP_NUM][GROUP_SIZE * 4];
+
+  size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int groupID = tid / GROUP_SIZE;
+  int groupBase = groupID * GROUP_STRIDE;
+  groupID = threadIdx.x / GROUP_SIZE;
+  if (groupBase >= N) return;
+  int rank = tid % GROUP_SIZE;
+
+  float* v_dst = dst + groupBase;
+  float* v_src = src + groupBase;
+  __pipeline_memcpy_async(sm_buffer[0][groupID] + rank * 4, 
+                          v_src + rank * 4,
+                          sizeof(float4));
+  __pipeline_commit();
+
+  for (int i = 0; i < TIMES; i++) {
+    if ((i + 1) < TIMES) {
+      __pipeline_memcpy_async(sm_buffer[(i & 0x01) ^ 1][groupID] + rank * 4, 
+                        v_src + (i+1) * LOOP_STRIDE  + rank * 4,
+                        sizeof(float4));
+    }
+    __pipeline_commit();
+    __pipeline_wait_prior(1);
+    float4 value_ = FETCH_FLOAT4(sm_buffer[(i & 0x01) ^ 0][groupID][rank * 4]);
+    int offset = i * LOOP_STRIDE + rank * 4;
+    __stwt(reinterpret_cast<float4*>(v_dst + offset), value_);
+  }
+}
+
+__global__ void memset_kernel(float* arr, float val) {
+  size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  arr[tid] = val;
+}
+
+__global__ void memcheck_kernel(float* arr, float val) {
+  size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (arr[tid] != val) {
+    printf("unequal ");
+  }
+}
+
+// Test memcpy kernel : contrast test
+template<typename V, int REPEAT>
+float test_memcpy_kernel(const size_t LEN) {
+  const int dim = 128;
+  const int nums = LEN / dim;
+  constexpr int BLOCK_SIZE = 128;
+  V *dev_src, *dev_dst;
+  float time;
+  CUDA_CHECK(cudaMalloc(&dev_src, LEN * sizeof(V)));
+  CUDA_CHECK(cudaMalloc(&dev_dst, LEN * sizeof(V)));
+  memset_kernel<<<LEN / BLOCK_SIZE, BLOCK_SIZE>>>(dev_src, 1.23f);
+  memset_kernel<<<LEN / BLOCK_SIZE, BLOCK_SIZE>>>(dev_dst, 0.0f);
+  CUDA_CHECK(cudaDeviceSynchronize());
+  cudaEvent_t start, stop;
+  CUDA_CHECK(cudaEventCreate(&start));
+  CUDA_CHECK(cudaEventCreate(&stop));
+  CUDA_CHECK(cudaEventRecord(start));
+  #pragma unroll
+  for (int i = 0; i < REPEAT; i++) {
+    //////////////////////////////////////////////////////////////////////////////////////
+    // memcpy_kernel1<<< LEN / 4 / BLOCK_SIZE, BLOCK_SIZE>>>(dev_dst, dev_src, LEN);
+    //////////////////////////////////////////////////////////////////////////////////////
+    // memcpy_kernel2<<< LEN / 4 / BLOCK_SIZE, BLOCK_SIZE>>>(dev_dst, dev_src, LEN);
+    //////////////////////////////////////////////////////////////////////////////////////
+    //---------------------
+    // memcpy_kernel3<4, 32><<< nums / BLOCK_SIZE, BLOCK_SIZE>>>(dev_dst, dev_src, LEN);
+    //---------------------
+    // memcpy_kernel3<8, 32><<< nums / BLOCK_SIZE, BLOCK_SIZE>>>(dev_dst, dev_src, LEN);
+    //---------------------
+    // memcpy_kernel3<16, 32><<< nums / BLOCK_SIZE, BLOCK_SIZE>>>(dev_dst, dev_src, LEN);
+    //---------------------
+    memcpy_kernel3<32><<< nums / BLOCK_SIZE, BLOCK_SIZE>>>(dev_dst, dev_src, LEN);
+    //////////////////////////////////////////////////////////////////////////////////////
+    //---------------------
+    // memcpy_kernel4<4, 32><<< nums / BLOCK_SIZE, BLOCK_SIZE>>>(dev_dst, dev_src, LEN);
+    //---------------------
+    // memcpy_kernel4<8, 32><<< nums / BLOCK_SIZE, BLOCK_SIZE>>>(dev_dst, dev_src, LEN);
+    //---------------------
+    // memcpy_kernel4<16, 32><<< nums / BLOCK_SIZE, BLOCK_SIZE>>>(dev_dst, dev_src, LEN);
+    //---------------------
+    // memcpy_kernel4<32><<< nums / BLOCK_SIZE, BLOCK_SIZE>>>(dev_dst, dev_src, LEN);
+  }
+  CUDA_CHECK(cudaEventRecord(stop));
+  CUDA_CHECK(cudaEventSynchronize(stop));
+  CUDA_CHECK(cudaEventElapsedTime(&time, start, stop));
+  CUDA_CHECK(cudaEventDestroy(start));
+  CUDA_CHECK(cudaEventDestroy(stop));
+  memcheck_kernel<<<LEN / BLOCK_SIZE, BLOCK_SIZE>>>(dev_dst, 1.23f);
+  CUDA_CHECK(cudaDeviceSynchronize());
+  CUDA_CHECK(cudaFree(dev_src));
+  CUDA_CHECK(cudaFree(dev_dst));  
+  return static_cast<float>(time / REPEAT);
 }

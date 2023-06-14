@@ -83,7 +83,11 @@ __global__ void create_atomic_keys(Bucket<K, V, S>* __restrict buckets,
                                    const size_t start, const size_t end,
                                    const size_t bucket_max_size) {
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
+  const K hashed_key = Murmur3HashDevice(static_cast<K>(EMPTY_KEY));
+  uint16_t empty_digest_16 = static_cast<uint16_t>(hashed_key >> 32);
   if (start + tid < end) {
+    for (size_t i = 0; i < bucket_max_size; i++)
+      buckets[start + tid].digests_16[i] = empty_digest_16;
     for (size_t i = 0; i < bucket_max_size; i++)
       buckets[start + tid].digests(i)[0] = empty_digest<K>();
     for (size_t i = 0; i < bucket_max_size; i++)
@@ -173,11 +177,13 @@ void initialize_buckets(Table<K, V, S>** table, const size_t start,
       bucket_max_size * (sizeof(AtomicKey<K>) + sizeof(AtomicScore<S>));
   // Align the digests according to the cache line size.
   uint32_t reserve_digest =
-      ((bucket_max_size + 127) / 128) * 128 * sizeof(uint8_t);
+      ((bucket_max_size + 127) / 128) * 128 * (sizeof(uint8_t) + sizeof(uint16_t));
   bucket_memory_size += reserve_digest;
   for (int i = start; i < end; i++) {
     CUDA_CHECK(
-        cudaMalloc(&((*table)->buckets[i].digests_), bucket_memory_size));
+        cudaMalloc(&((*table)->buckets[i].digests_16), bucket_memory_size));
+    (*table)->buckets[i].digests_ = 
+        reinterpret_cast<uint8_t*>((*table)->buckets[i].digests_16 + 128);
     (*table)->buckets[i].keys_ =
         reinterpret_cast<AtomicKey<K>*>((*table)->buckets[i].digests_ + 128);
     (*table)->buckets[i].scores_ = reinterpret_cast<AtomicScore<S>*>(
@@ -319,7 +325,7 @@ void double_capacity(Table<K, V, S>** table) {
 template <class K, class V, class S>
 void destroy_table(Table<K, V, S>** table) {
   for (int i = 0; i < (*table)->buckets_num; i++) {
-    CUDA_CHECK(cudaFree((*table)->buckets[i].digests_));
+    CUDA_CHECK(cudaFree((*table)->buckets[i].digests_16));
   }
 
   for (int i = 0; i < (*table)->num_of_memory_slices; i++) {
