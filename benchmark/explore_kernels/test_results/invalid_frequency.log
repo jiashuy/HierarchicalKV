@@ -1,0 +1,835 @@
+=================================================================================================
+Test find, 8 bits digests, frequency of invalid times
+=================================================================================================
+-------------------------------------------------------------------------------------------------
+Capacity = 64 * 1024 * 1024     Batch = 1024 * 1024     Key = 64 bits   Value = 16 B
+-------------------------------------------------------------------------------------------------
+Loop number for init : 13
+Load factor : 0.200
+Hit rate : 1.000
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1037559
+Invalid times 2 Frequency 7547
+Invalid times 3 Frequency 333
+Invalid times 4 Frequency 334
+Invalid times 5 Frequency 333
+Invalid times 6 Frequency 326
+Invalid times 7 Frequency 334
+Invalid times 8 Frequency 305
+Invalid times 9 Frequency 289
+Invalid times 10        Frequency 294
+Invalid times 11        Frequency 275
+Invalid times 12        Frequency 274
+Invalid times 13        Frequency 181
+Invalid times 14        Frequency 123
+Invalid times 15        Frequency 57
+Invalid times 16        Frequency 12
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+Found keys : 1048576
+Correct value : 1048576
+-------------------------------------------------------------------------------------------------
+Load factor 0.020
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1044101
+Invalid times 2 Frequency 904
+Invalid times 3 Frequency 275
+Invalid times 4 Frequency 253
+Invalid times 5 Frequency 240
+Invalid times 6 Frequency 268
+Invalid times 7 Frequency 274
+Invalid times 8 Frequency 283
+Invalid times 9 Frequency 270
+Invalid times 10        Frequency 246
+Invalid times 11        Frequency 255
+Invalid times 12        Frequency 238
+Invalid times 13        Frequency 264
+Invalid times 14        Frequency 263
+Invalid times 15        Frequency 242
+Invalid times 16        Frequency 200
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.050
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1043052
+Invalid times 2 Frequency 1902
+Invalid times 3 Frequency 292
+Invalid times 4 Frequency 239
+Invalid times 5 Frequency 284
+Invalid times 6 Frequency 285
+Invalid times 7 Frequency 260
+Invalid times 8 Frequency 277
+Invalid times 9 Frequency 266
+Invalid times 10        Frequency 279
+Invalid times 11        Frequency 286
+Invalid times 12        Frequency 250
+Invalid times 13        Frequency 276
+Invalid times 14        Frequency 271
+Invalid times 15        Frequency 224
+Invalid times 16        Frequency 133
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.080
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1042023
+Invalid times 2 Frequency 3017
+Invalid times 3 Frequency 275
+Invalid times 4 Frequency 289
+Invalid times 5 Frequency 276
+Invalid times 6 Frequency 279
+Invalid times 7 Frequency 272
+Invalid times 8 Frequency 265
+Invalid times 9 Frequency 269
+Invalid times 10        Frequency 290
+Invalid times 11        Frequency 281
+Invalid times 12        Frequency 286
+Invalid times 13        Frequency 295
+Invalid times 14        Frequency 234
+Invalid times 15        Frequency 153
+Invalid times 16        Frequency 72
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.110
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1040820
+Invalid times 2 Frequency 4224
+Invalid times 3 Frequency 279
+Invalid times 4 Frequency 330
+Invalid times 5 Frequency 294
+Invalid times 6 Frequency 257
+Invalid times 7 Frequency 257
+Invalid times 8 Frequency 263
+Invalid times 9 Frequency 324
+Invalid times 10        Frequency 305
+Invalid times 11        Frequency 276
+Invalid times 12        Frequency 280
+Invalid times 13        Frequency 282
+Invalid times 14        Frequency 183
+Invalid times 15        Frequency 144
+Invalid times 16        Frequency 58
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.140
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1039961
+Invalid times 2 Frequency 5119
+Invalid times 3 Frequency 322
+Invalid times 4 Frequency 302
+Invalid times 5 Frequency 290
+Invalid times 6 Frequency 308
+Invalid times 7 Frequency 302
+Invalid times 8 Frequency 284
+Invalid times 9 Frequency 289
+Invalid times 10        Frequency 300
+Invalid times 11        Frequency 274
+Invalid times 12        Frequency 268
+Invalid times 13        Frequency 225
+Invalid times 14        Frequency 192
+Invalid times 15        Frequency 105
+Invalid times 16        Frequency 35
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.170
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1038884
+Invalid times 2 Frequency 6254
+Invalid times 3 Frequency 309
+Invalid times 4 Frequency 298
+Invalid times 5 Frequency 291
+Invalid times 6 Frequency 323
+Invalid times 7 Frequency 297
+Invalid times 8 Frequency 310
+Invalid times 9 Frequency 287
+Invalid times 10        Frequency 332
+Invalid times 11        Frequency 285
+Invalid times 12        Frequency 268
+Invalid times 13        Frequency 210
+Invalid times 14        Frequency 134
+Invalid times 15        Frequency 71
+Invalid times 16        Frequency 23
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.200
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1037559
+Invalid times 2 Frequency 7547
+Invalid times 3 Frequency 333
+Invalid times 4 Frequency 334
+Invalid times 5 Frequency 333
+Invalid times 6 Frequency 326
+Invalid times 7 Frequency 334
+Invalid times 8 Frequency 305
+Invalid times 9 Frequency 289
+Invalid times 10        Frequency 294
+Invalid times 11        Frequency 275
+Invalid times 12        Frequency 274
+Invalid times 13        Frequency 181
+Invalid times 14        Frequency 123
+Invalid times 15        Frequency 57
+Invalid times 16        Frequency 12
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.230
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1036486
+Invalid times 2 Frequency 8632
+Invalid times 3 Frequency 368
+Invalid times 4 Frequency 336
+Invalid times 5 Frequency 352
+Invalid times 6 Frequency 299
+Invalid times 7 Frequency 337
+Invalid times 8 Frequency 338
+Invalid times 9 Frequency 312
+Invalid times 10        Frequency 308
+Invalid times 11        Frequency 279
+Invalid times 12        Frequency 224
+Invalid times 13        Frequency 148
+Invalid times 14        Frequency 107
+Invalid times 15        Frequency 42
+Invalid times 16        Frequency 8
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.260
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1035095
+Invalid times 2 Frequency 9947
+Invalid times 3 Frequency 413
+Invalid times 4 Frequency 377
+Invalid times 5 Frequency 354
+Invalid times 6 Frequency 359
+Invalid times 7 Frequency 352
+Invalid times 8 Frequency 326
+Invalid times 9 Frequency 359
+Invalid times 10        Frequency 273
+Invalid times 11        Frequency 234
+Invalid times 12        Frequency 212
+Invalid times 13        Frequency 167
+Invalid times 14        Frequency 79
+Invalid times 15        Frequency 27
+Invalid times 16        Frequency 2
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.290
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1034170
+Invalid times 2 Frequency 10919
+Invalid times 3 Frequency 441
+Invalid times 4 Frequency 346
+Invalid times 5 Frequency 363
+Invalid times 6 Frequency 341
+Invalid times 7 Frequency 368
+Invalid times 8 Frequency 331
+Invalid times 9 Frequency 332
+Invalid times 10        Frequency 322
+Invalid times 11        Frequency 258
+Invalid times 12        Frequency 200
+Invalid times 13        Frequency 118
+Invalid times 14        Frequency 47
+Invalid times 15        Frequency 16
+Invalid times 16        Frequency 4
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.320
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1032940
+Invalid times 2 Frequency 12252
+Invalid times 3 Frequency 467
+Invalid times 4 Frequency 382
+Invalid times 5 Frequency 382
+Invalid times 6 Frequency 367
+Invalid times 7 Frequency 360
+Invalid times 8 Frequency 362
+Invalid times 9 Frequency 314
+Invalid times 10        Frequency 275
+Invalid times 11        Frequency 218
+Invalid times 12        Frequency 133
+Invalid times 13        Frequency 81
+Invalid times 14        Frequency 32
+Invalid times 15        Frequency 8
+Invalid times 16        Frequency 3
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.350
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1031668
+Invalid times 2 Frequency 13530
+Invalid times 3 Frequency 492
+Invalid times 4 Frequency 381
+Invalid times 5 Frequency 390
+Invalid times 6 Frequency 390
+Invalid times 7 Frequency 377
+Invalid times 8 Frequency 346
+Invalid times 9 Frequency 296
+Invalid times 10        Frequency 250
+Invalid times 11        Frequency 202
+Invalid times 12        Frequency 144
+Invalid times 13        Frequency 69
+Invalid times 14        Frequency 27
+Invalid times 15        Frequency 14
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.380
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1030196
+Invalid times 2 Frequency 14949
+Invalid times 3 Frequency 534
+Invalid times 4 Frequency 442
+Invalid times 5 Frequency 376
+Invalid times 6 Frequency 398
+Invalid times 7 Frequency 382
+Invalid times 8 Frequency 359
+Invalid times 9 Frequency 311
+Invalid times 10        Frequency 251
+Invalid times 11        Frequency 173
+Invalid times 12        Frequency 102
+Invalid times 13        Frequency 69
+Invalid times 14        Frequency 21
+Invalid times 15        Frequency 11
+Invalid times 16        Frequency 2
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.410
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1028810
+Invalid times 2 Frequency 16333
+Invalid times 3 Frequency 634
+Invalid times 4 Frequency 414
+Invalid times 5 Frequency 399
+Invalid times 6 Frequency 432
+Invalid times 7 Frequency 373
+Invalid times 8 Frequency 367
+Invalid times 9 Frequency 279
+Invalid times 10        Frequency 225
+Invalid times 11        Frequency 160
+Invalid times 12        Frequency 89
+Invalid times 13        Frequency 45
+Invalid times 14        Frequency 13
+Invalid times 15        Frequency 3
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.440
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1027537
+Invalid times 2 Frequency 17738
+Invalid times 3 Frequency 668
+Invalid times 4 Frequency 435
+Invalid times 5 Frequency 431
+Invalid times 6 Frequency 416
+Invalid times 7 Frequency 364
+Invalid times 8 Frequency 299
+Invalid times 9 Frequency 250
+Invalid times 10        Frequency 195
+Invalid times 11        Frequency 127
+Invalid times 12        Frequency 73
+Invalid times 13        Frequency 31
+Invalid times 14        Frequency 8
+Invalid times 15        Frequency 4
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.470
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1025935
+Invalid times 2 Frequency 19339
+Invalid times 3 Frequency 752
+Invalid times 4 Frequency 486
+Invalid times 5 Frequency 445
+Invalid times 6 Frequency 405
+Invalid times 7 Frequency 328
+Invalid times 8 Frequency 303
+Invalid times 9 Frequency 220
+Invalid times 10        Frequency 179
+Invalid times 11        Frequency 101
+Invalid times 12        Frequency 54
+Invalid times 13        Frequency 22
+Invalid times 14        Frequency 6
+Invalid times 15        Frequency 1
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.500
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1024097
+Invalid times 2 Frequency 21218
+Invalid times 3 Frequency 809
+Invalid times 4 Frequency 465
+Invalid times 5 Frequency 479
+Invalid times 6 Frequency 369
+Invalid times 7 Frequency 350
+Invalid times 8 Frequency 275
+Invalid times 9 Frequency 202
+Invalid times 10        Frequency 148
+Invalid times 11        Frequency 87
+Invalid times 12        Frequency 48
+Invalid times 13        Frequency 21
+Invalid times 14        Frequency 8
+Invalid times 15        Frequency 0
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.530
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1022300
+Invalid times 2 Frequency 23013
+Invalid times 3 Frequency 842
+Invalid times 4 Frequency 508
+Invalid times 5 Frequency 431
+Invalid times 6 Frequency 392
+Invalid times 7 Frequency 335
+Invalid times 8 Frequency 259
+Invalid times 9 Frequency 221
+Invalid times 10        Frequency 146
+Invalid times 11        Frequency 76
+Invalid times 12        Frequency 39
+Invalid times 13        Frequency 8
+Invalid times 14        Frequency 5
+Invalid times 15        Frequency 1
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.560
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1020600
+Invalid times 2 Frequency 24771
+Invalid times 3 Frequency 935
+Invalid times 4 Frequency 555
+Invalid times 5 Frequency 466
+Invalid times 6 Frequency 371
+Invalid times 7 Frequency 280
+Invalid times 8 Frequency 247
+Invalid times 9 Frequency 171
+Invalid times 10        Frequency 88
+Invalid times 11        Frequency 60
+Invalid times 12        Frequency 25
+Invalid times 13        Frequency 4
+Invalid times 14        Frequency 2
+Invalid times 15        Frequency 1
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.590
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1017967
+Invalid times 2 Frequency 27331
+Invalid times 3 Frequency 1076
+Invalid times 4 Frequency 559
+Invalid times 5 Frequency 434
+Invalid times 6 Frequency 396
+Invalid times 7 Frequency 299
+Invalid times 8 Frequency 213
+Invalid times 9 Frequency 144
+Invalid times 10        Frequency 89
+Invalid times 11        Frequency 44
+Invalid times 12        Frequency 15
+Invalid times 13        Frequency 6
+Invalid times 14        Frequency 3
+Invalid times 15        Frequency 0
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.620
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1015394
+Invalid times 2 Frequency 30029
+Invalid times 3 Frequency 1245
+Invalid times 4 Frequency 498
+Invalid times 5 Frequency 422
+Invalid times 6 Frequency 333
+Invalid times 7 Frequency 266
+Invalid times 8 Frequency 166
+Invalid times 9 Frequency 107
+Invalid times 10        Frequency 54
+Invalid times 11        Frequency 40
+Invalid times 12        Frequency 18
+Invalid times 13        Frequency 4
+Invalid times 14        Frequency 0
+Invalid times 15        Frequency 0
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.650
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1012641
+Invalid times 2 Frequency 32760
+Invalid times 3 Frequency 1359
+Invalid times 4 Frequency 479
+Invalid times 5 Frequency 416
+Invalid times 6 Frequency 340
+Invalid times 7 Frequency 255
+Invalid times 8 Frequency 150
+Invalid times 9 Frequency 94
+Invalid times 10        Frequency 45
+Invalid times 11        Frequency 26
+Invalid times 12        Frequency 6
+Invalid times 13        Frequency 4
+Invalid times 14        Frequency 0
+Invalid times 15        Frequency 1
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.680
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1009194
+Invalid times 2 Frequency 36175
+Invalid times 3 Frequency 1544
+Invalid times 4 Frequency 495
+Invalid times 5 Frequency 400
+Invalid times 6 Frequency 285
+Invalid times 7 Frequency 211
+Invalid times 8 Frequency 133
+Invalid times 9 Frequency 71
+Invalid times 10        Frequency 50
+Invalid times 11        Frequency 8
+Invalid times 12        Frequency 9
+Invalid times 13        Frequency 1
+Invalid times 14        Frequency 0
+Invalid times 15        Frequency 0
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.710
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 1004586
+Invalid times 2 Frequency 40474
+Invalid times 3 Frequency 1915
+Invalid times 4 Frequency 499
+Invalid times 5 Frequency 362
+Invalid times 6 Frequency 296
+Invalid times 7 Frequency 191
+Invalid times 8 Frequency 116
+Invalid times 9 Frequency 71
+Invalid times 10        Frequency 45
+Invalid times 11        Frequency 15
+Invalid times 12        Frequency 6
+Invalid times 13        Frequency 0
+Invalid times 14        Frequency 0
+Invalid times 15        Frequency 0
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.740
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 998779
+Invalid times 2 Frequency 45893
+Invalid times 3 Frequency 2437
+Invalid times 4 Frequency 526
+Invalid times 5 Frequency 315
+Invalid times 6 Frequency 252
+Invalid times 7 Frequency 161
+Invalid times 8 Frequency 113
+Invalid times 9 Frequency 66
+Invalid times 10        Frequency 20
+Invalid times 11        Frequency 7
+Invalid times 12        Frequency 5
+Invalid times 13        Frequency 1
+Invalid times 14        Frequency 1
+Invalid times 15        Frequency 0
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.770
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 991660
+Invalid times 2 Frequency 52492
+Invalid times 3 Frequency 3088
+Invalid times 4 Frequency 546
+Invalid times 5 Frequency 322
+Invalid times 6 Frequency 187
+Invalid times 7 Frequency 145
+Invalid times 8 Frequency 66
+Invalid times 9 Frequency 42
+Invalid times 10        Frequency 16
+Invalid times 11        Frequency 9
+Invalid times 12        Frequency 3
+Invalid times 13        Frequency 0
+Invalid times 14        Frequency 0
+Invalid times 15        Frequency 0
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.800
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 982463
+Invalid times 2 Frequency 60749
+Invalid times 3 Frequency 4038
+Invalid times 4 Frequency 614
+Invalid times 5 Frequency 309
+Invalid times 6 Frequency 187
+Invalid times 7 Frequency 107
+Invalid times 8 Frequency 64
+Invalid times 9 Frequency 28
+Invalid times 10        Frequency 12
+Invalid times 11        Frequency 4
+Invalid times 12        Frequency 1
+Invalid times 13        Frequency 0
+Invalid times 14        Frequency 0
+Invalid times 15        Frequency 0
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.830
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 970487
+Invalid times 2 Frequency 71237
+Invalid times 3 Frequency 5551
+Invalid times 4 Frequency 740
+Invalid times 5 Frequency 262
+Invalid times 6 Frequency 126
+Invalid times 7 Frequency 80
+Invalid times 8 Frequency 57
+Invalid times 9 Frequency 24
+Invalid times 10        Frequency 9
+Invalid times 11        Frequency 2
+Invalid times 12        Frequency 1
+Invalid times 13        Frequency 0
+Invalid times 14        Frequency 0
+Invalid times 15        Frequency 0
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.860
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 954745
+Invalid times 2 Frequency 84655
+Invalid times 3 Frequency 7728
+Invalid times 4 Frequency 931
+Invalid times 5 Frequency 270
+Invalid times 6 Frequency 129
+Invalid times 7 Frequency 74
+Invalid times 8 Frequency 26
+Invalid times 9 Frequency 11
+Invalid times 10        Frequency 5
+Invalid times 11        Frequency 1
+Invalid times 12        Frequency 1
+Invalid times 13        Frequency 0
+Invalid times 14        Frequency 0
+Invalid times 15        Frequency 0
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.890
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 935364
+Invalid times 2 Frequency 100810
+Invalid times 3 Frequency 10758
+Invalid times 4 Frequency 1253
+Invalid times 5 Frequency 237
+Invalid times 6 Frequency 74
+Invalid times 7 Frequency 43
+Invalid times 8 Frequency 24
+Invalid times 9 Frequency 7
+Invalid times 10        Frequency 5
+Invalid times 11        Frequency 1
+Invalid times 12        Frequency 0
+Invalid times 13        Frequency 0
+Invalid times 14        Frequency 0
+Invalid times 15        Frequency 0
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.920
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 912563
+Invalid times 2 Frequency 119644
+Invalid times 3 Frequency 14421
+Invalid times 4 Frequency 1598
+Invalid times 5 Frequency 237
+Invalid times 6 Frequency 54
+Invalid times 7 Frequency 35
+Invalid times 8 Frequency 13
+Invalid times 9 Frequency 7
+Invalid times 10        Frequency 2
+Invalid times 11        Frequency 1
+Invalid times 12        Frequency 0
+Invalid times 13        Frequency 0
+Invalid times 14        Frequency 1
+Invalid times 15        Frequency 0
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.950
+-------------------------------------------------------------------------------------------------
+Invalid times 0 Frequency 0
+Invalid times 1 Frequency 885337
+Invalid times 2 Frequency 141691
+Invalid times 3 Frequency 19116
+Invalid times 4 Frequency 2126
+Invalid times 5 Frequency 231
+Invalid times 6 Frequency 50
+Invalid times 7 Frequency 11
+Invalid times 8 Frequency 6
+Invalid times 9 Frequency 5
+Invalid times 10        Frequency 1
+Invalid times 11        Frequency 2
+Invalid times 12        Frequency 0
+Invalid times 13        Frequency 0
+Invalid times 14        Frequency 0
+Invalid times 15        Frequency 0
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+-------------------------------------------------------------------------------------------------
+Load factor 0.980
+-------------------------------------------------------------------------------------------------
+Invalid times 0         Frequency 0
+Invalid times 1         Frequency 855083
+Invalid times 2         Frequency 166328
+Invalid times 3         Frequency 24029
+Invalid times 4         Frequency 2817
+Invalid times 5         Frequency 288
+Invalid times 6         Frequency 22
+Invalid times 7         Frequency 5
+Invalid times 8         Frequency 4
+Invalid times 9         Frequency 0
+Invalid times 10        Frequency 0
+Invalid times 11        Frequency 0
+Invalid times 12        Frequency 0
+Invalid times 13        Frequency 0
+Invalid times 14        Frequency 0
+Invalid times 15        Frequency 0
+Invalid times 16        Frequency 0
+Invalid times 17        Frequency 0
+Invalid times 18        Frequency 0
+Invalid times 19        Frequency 0
+
+
+don't early stop:
+-------------------------------------------------------------------------------------------------
+Load factor 0.980
+-------------------------------------------------------------------------------------------------
+Invalid times 0         Frequency 0
+Invalid times 1         Frequency 642514
+Invalid times 2         Frequency 314988
+Invalid times 3         Frequency 76124
+Invalid times 4         Frequency 12391
+Invalid times 5         Frequency 1569
+Invalid times 6         Frequency 206
+Invalid times 7         Frequency 116
+Invalid times 8         Frequency 83
+Invalid times 9         Frequency 90
+Invalid times 10        Frequency 76
+Invalid times 11        Frequency 76
+Invalid times 12        Frequency 47
+Invalid times 13        Frequency 51
+Invalid times 14        Frequency 36
+Invalid times 15        Frequency 32
+Invalid times 16        Frequency 19
+Invalid times 17        Frequency 28
+Invalid times 18        Frequency 31
+Invalid times 19        Frequency 17
+Invalid times 20        Frequency 18
+Invalid times 21        Frequency 10
+Invalid times 22        Frequency 8
+Invalid times 23        Frequency 10
+Invalid times 24        Frequency 13
+Invalid times 25        Frequency 1
+Invalid times 26        Frequency 4
+Invalid times 27        Frequency 3
+Invalid times 28        Frequency 6
+Invalid times 29        Frequency 1
+Invalid times 30        Frequency 3
+Invalid times 31        Frequency 0
+Invalid times 32        Frequency 0
+Invalid times 33        Frequency 3
+Invalid times 34        Frequency 0
+Invalid times 35        Frequency 1
+Invalid times 36        Frequency 0
+Invalid times 37        Frequency 0
+Invalid times 38        Frequency 1

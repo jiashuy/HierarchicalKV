@@ -54,7 +54,7 @@ __global__ void  lookup_kernel_with_io_v4_1(
 
   for (int offset = 0; offset < bucket_max_size; offset += 16) {
     int key_pos = 
-      (offset) & (bucket_max_size - 1);
+      (offset + start_idx) & (bucket_max_size - 1);
   
     uint4 tags_ = tag_base[key_pos >> 4];
     uint32_t tags[4] = 

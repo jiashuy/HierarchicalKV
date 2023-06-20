@@ -253,6 +253,12 @@ class HashTable {
     return table_;
   }
 
+  /// @brief Commonly used for profiling.
+  /// @return Pointer to table_.
+  nv::merlin::Table<K, V, S>* get_device_table() const {
+    return d_table_;
+  }
+
   /**
    * @brief Insert new key-value-score tuples into the hash table.
    * If the key already exists, the values and scores are assigned new values.
@@ -913,7 +919,7 @@ class HashTable {
                                                         score_type, ArchTag>;
       const uint32_t pipeline_max_size = Selector::max_value_size();
       // Only support bucket_size = 128
-      if (options_.max_bucket_size == 128 && value_size <= pipeline_max_size) {
+      if (false && options_.max_bucket_size == 128 && value_size <= pipeline_max_size) {
         LookupKernelParams<key_type, value_type, score_type> lookupParams(
             table_->buckets, table_->buckets_num,
             static_cast<uint32_t>(options_.dim), keys, values, scores, founds,

@@ -1,0 +1,410 @@
+=================================================================================================
+Test the bucket size's effect to Hashtable
+=================================================================================================
+-------------------------------------------------------------------------------------------------
+Test correct rate for different bucket size
+Capacity: 64 * 1024 * 1024              key number per operation: 256
+-------------------------------------------------------------------------------------------------
+Bucket size 8
+[Round 0]correct_rate=0.86
+[Round 1]correct_rate=0.86
+[Round 2]correct_rate=0.86
+Bucket size 16
+[Round 0]correct_rate=0.901
+[Round 1]correct_rate=0.901
+[Round 2]correct_rate=0.901
+Bucket size 32
+[Round 0]correct_rate=0.93
+[Round 1]correct_rate=0.93
+[Round 2]correct_rate=0.93
+Bucket size 64
+[Round 0]correct_rate=0.95
+[Round 1]correct_rate=0.95
+[Round 2]correct_rate=0.95
+Bucket size 128
+[Round 0]correct_rate=0.965
+[Round 1]correct_rate=0.965
+[Round 2]correct_rate=0.965
+Bucket size 256
+[Round 0]correct_rate=0.975
+[Round 1]correct_rate=0.975
+[Round 2]correct_rate=0.975
+Bucket size 512
+[Round 0]correct_rate=0.982
+[Round 1]correct_rate=0.982
+[Round 2]correct_rate=0.982
+Bucket size 1024
+[Round 0]correct_rate=0.988
+[Round 1]correct_rate=0.988
+[Round 2]correct_rate=0.988
+Bucket size 2048
+[Round 0]correct_rate=0.991
+[Round 1]correct_rate=0.991
+[Round 2]correct_rate=0.991
+-------------------------------------------------------------------------------------------------
+Test the load factor when the first evict occurs for different bucket size
+Capacity: 64 * 1024 * 1024              key number per operation: 256
+-------------------------------------------------------------------------------------------------
+Bucket size 8           Load factor 0.0732918           Evict_number 1
+Bucket size 16          Load factor 0.202686            Evict_number 1
+Bucket size 32          Load factor 0.382576            Evict_number 1
+Bucket size 64          Load factor 0.481449            Evict_number 1
+Bucket size 128         Load factor 0.638474            Evict_number 1
+Bucket size 256         Load factor 0.746506            Evict_number 1
+Bucket size 512         Load factor 0.814697            Evict_number 1
+Bucket size 1024                Load factor 0.872963            Evict_number 1
+Bucket size 2048                Load factor 0.908298            Evict_number 1
+-------------------------------------------------------------------------------------------------
+Test the evict number when table is full for different bucket size
+Capacity: 64 * 1024 * 1024              key number per operation: 256
+-------------------------------------------------------------------------------------------------
+Bucket size 8           Load factor 0.98                Evict_number 35485911
+Bucket size 16          Load factor 0.98                Evict_number 20686300
+Bucket size 32          Load factor 0.980001            Evict_number 12037563
+Bucket size 64          Load factor 0.98                Evict_number 6907612
+Bucket size 128         Load factor 0.98                Evict_number 3862236
+Bucket size 256         Load factor 0.980001            Evict_number 2067078
+Bucket size 512         Load factor 0.980001            Evict_number 1035425
+Bucket size 1024                Load factor 0.98                Evict_number 468169
+Bucket size 2048                Load factor 0.980001            Evict_number 182145
+-------------------------------------------------------------------------------------------------
+Test the max score be evicted in the load factor interval for different bucket size
+Capacity: 64 * 1024 * 1024              key number per operation: 256
+-------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------
+Bucket size = 8
+-------------------------------------------------------------------------------------------------
+Load factor: 0.02               Max score: 0
+Load factor: 0.05               Max score: 0
+Load factor: 0.08               Max score: 265588
+Load factor: 0.11               Max score: 179653
+Load factor: 0.14               Max score: 2518929
+Load factor: 0.17               Max score: 6254230
+Load factor: 0.2                Max score: 7206262
+Load factor: 0.23               Max score: 9997093
+Load factor: 0.26               Max score: 12591608
+Load factor: 0.29               Max score: 13526503
+Load factor: 0.32               Max score: 16479411
+Load factor: 0.35               Max score: 17310124
+Load factor: 0.38               Max score: 20067750
+Load factor: 0.41               Max score: 21816368
+Load factor: 0.44               Max score: 24392958
+Load factor: 0.47               Max score: 25268388
+Load factor: 0.5                Max score: 27533263
+Load factor: 0.53               Max score: 32142304
+Load factor: 0.56               Max score: 33656139
+Load factor: 0.59               Max score: 34197723
+Load factor: 0.62               Max score: 37378066
+Load factor: 0.65               Max score: 39286601
+Load factor: 0.68               Max score: 42897243
+Load factor: 0.71               Max score: 44127854
+Load factor: 0.74               Max score: 48180271
+Load factor: 0.77               Max score: 52050336
+Load factor: 0.8                Max score: 54304484
+Load factor: 0.83               Max score: 56502365
+Load factor: 0.86               Max score: 60932549
+Load factor: 0.89               Max score: 64715253
+Load factor: 0.92               Max score: 71784067
+Load factor: 0.95               Max score: 79396487
+Load factor: 0.98               Max score: 96286949
+-------------------------------------------------------------------------------------------------
+Bucket size = 16
+-------------------------------------------------------------------------------------------------
+Load factor: 0.02               Max score: 0
+Load factor: 0.05               Max score: 0
+Load factor: 0.08               Max score: 0
+Load factor: 0.11               Max score: 0
+Load factor: 0.14               Max score: 0
+Load factor: 0.17               Max score: 0
+Load factor: 0.2                Max score: 0
+Load factor: 0.23               Max score: 1366197
+Load factor: 0.26               Max score: 2899010
+Load factor: 0.29               Max score: 4862662
+Load factor: 0.32               Max score: 6604604
+Load factor: 0.35               Max score: 9768769
+Load factor: 0.38               Max score: 9611195
+Load factor: 0.41               Max score: 11220918
+Load factor: 0.44               Max score: 15697209
+Load factor: 0.47               Max score: 16783016
+Load factor: 0.5                Max score: 18108320
+Load factor: 0.53               Max score: 20722896
+Load factor: 0.56               Max score: 21537813
+Load factor: 0.59               Max score: 25195667
+Load factor: 0.62               Max score: 25805369
+Load factor: 0.65               Max score: 27611376
+Load factor: 0.68               Max score: 30321936
+Load factor: 0.71               Max score: 33856447
+Load factor: 0.74               Max score: 35473867
+Load factor: 0.77               Max score: 40078381
+Load factor: 0.8                Max score: 39853193
+Load factor: 0.83               Max score: 42871842
+Load factor: 0.86               Max score: 46726598
+Load factor: 0.89               Max score: 52279449
+Load factor: 0.92               Max score: 56316912
+Load factor: 0.95               Max score: 61229837
+Load factor: 0.98               Max score: 72226480
+-------------------------------------------------------------------------------------------------
+Bucket size = 32
+-------------------------------------------------------------------------------------------------
+Load factor: 0.02               Max score: 0
+Load factor: 0.05               Max score: 0
+Load factor: 0.08               Max score: 0
+Load factor: 0.11               Max score: 0
+Load factor: 0.14               Max score: 0
+Load factor: 0.17               Max score: 0
+Load factor: 0.2                Max score: 0
+Load factor: 0.23               Max score: 0
+Load factor: 0.26               Max score: 0
+Load factor: 0.29               Max score: 0
+Load factor: 0.32               Max score: 0
+Load factor: 0.35               Max score: 0
+Load factor: 0.38               Max score: 0
+Load factor: 0.41               Max score: 3151633
+Load factor: 0.44               Max score: 4253138
+Load factor: 0.47               Max score: 6304504
+Load factor: 0.5                Max score: 8470047
+Load factor: 0.53               Max score: 11468371
+Load factor: 0.56               Max score: 13694121
+Load factor: 0.59               Max score: 14373168
+Load factor: 0.62               Max score: 16190255
+Load factor: 0.65               Max score: 17986919
+Load factor: 0.68               Max score: 21985155
+Load factor: 0.71               Max score: 24073964
+Load factor: 0.74               Max score: 25890499
+Load factor: 0.77               Max score: 27110456
+Load factor: 0.8                Max score: 31009598
+Load factor: 0.83               Max score: 34313865
+Load factor: 0.86               Max score: 36307996
+Load factor: 0.89               Max score: 37254823
+Load factor: 0.92               Max score: 40962206
+Load factor: 0.95               Max score: 45032839
+Load factor: 0.98               Max score: 52836018
+-------------------------------------------------------------------------------------------------
+Bucket size = 64
+-------------------------------------------------------------------------------------------------
+Load factor: 0.02               Max score: 0
+Load factor: 0.05               Max score: 0
+Load factor: 0.08               Max score: 0
+Load factor: 0.11               Max score: 0
+Load factor: 0.14               Max score: 0
+Load factor: 0.17               Max score: 0
+Load factor: 0.2                Max score: 0
+Load factor: 0.23               Max score: 0
+Load factor: 0.26               Max score: 0
+Load factor: 0.29               Max score: 0
+Load factor: 0.32               Max score: 0
+Load factor: 0.35               Max score: 0
+Load factor: 0.38               Max score: 0
+Load factor: 0.41               Max score: 0
+Load factor: 0.44               Max score: 0
+Load factor: 0.47               Max score: 0
+Load factor: 0.5                Max score: 1021618
+Load factor: 0.53               Max score: 1630603
+Load factor: 0.56               Max score: 2221015
+Load factor: 0.59               Max score: 5463710
+Load factor: 0.62               Max score: 4699820
+Load factor: 0.65               Max score: 8396617
+Load factor: 0.68               Max score: 11427907
+Load factor: 0.71               Max score: 11527657
+Load factor: 0.74               Max score: 15212055
+Load factor: 0.77               Max score: 17756051
+Load factor: 0.8                Max score: 18350742
+Load factor: 0.83               Max score: 19111789
+Load factor: 0.86               Max score: 22138006
+Load factor: 0.89               Max score: 25762247
+Load factor: 0.92               Max score: 27447048
+Load factor: 0.95               Max score: 30990509
+Load factor: 0.98               Max score: 36922783
+-------------------------------------------------------------------------------------------------
+Bucket size = 128
+-------------------------------------------------------------------------------------------------
+Load factor: 0.02               Max score: 0
+Load factor: 0.05               Max score: 0
+Load factor: 0.08               Max score: 0
+Load factor: 0.11               Max score: 0
+Load factor: 0.14               Max score: 0
+Load factor: 0.17               Max score: 0
+Load factor: 0.2                Max score: 0
+Load factor: 0.23               Max score: 0
+Load factor: 0.26               Max score: 0
+Load factor: 0.29               Max score: 0
+Load factor: 0.32               Max score: 0
+Load factor: 0.35               Max score: 0
+Load factor: 0.38               Max score: 0
+Load factor: 0.41               Max score: 0
+Load factor: 0.44               Max score: 0
+Load factor: 0.47               Max score: 0
+Load factor: 0.5                Max score: 0
+Load factor: 0.53               Max score: 0
+Load factor: 0.56               Max score: 0
+Load factor: 0.59               Max score: 0
+Load factor: 0.62               Max score: 0
+Load factor: 0.65               Max score: 2032640
+Load factor: 0.68               Max score: 4091989
+Load factor: 0.71               Max score: 6864835
+Load factor: 0.74               Max score: 7673832
+Load factor: 0.77               Max score: 9069358
+Load factor: 0.8                Max score: 11653847
+Load factor: 0.83               Max score: 12403776
+Load factor: 0.86               Max score: 13631180
+Load factor: 0.89               Max score: 15608660
+Load factor: 0.92               Max score: 19373257
+Load factor: 0.95               Max score: 21647361
+Load factor: 0.98               Max score: 26494407
+-------------------------------------------------------------------------------------------------
+Bucket size = 256
+-------------------------------------------------------------------------------------------------
+Load factor: 0.02               Max score: 0
+Load factor: 0.05               Max score: 0
+Load factor: 0.08               Max score: 0
+Load factor: 0.11               Max score: 0
+Load factor: 0.14               Max score: 0
+Load factor: 0.17               Max score: 0
+Load factor: 0.2                Max score: 0
+Load factor: 0.23               Max score: 0
+Load factor: 0.26               Max score: 0
+Load factor: 0.29               Max score: 0
+Load factor: 0.32               Max score: 0
+Load factor: 0.35               Max score: 0
+Load factor: 0.38               Max score: 0
+Load factor: 0.41               Max score: 0
+Load factor: 0.44               Max score: 0
+Load factor: 0.47               Max score: 0
+Load factor: 0.5                Max score: 0
+Load factor: 0.53               Max score: 0
+Load factor: 0.56               Max score: 0
+Load factor: 0.59               Max score: 0
+Load factor: 0.62               Max score: 0
+Load factor: 0.65               Max score: 0
+Load factor: 0.68               Max score: 0
+Load factor: 0.71               Max score: 0
+Load factor: 0.74               Max score: 0
+Load factor: 0.77               Max score: 2567108
+Load factor: 0.8                Max score: 5450861
+Load factor: 0.83               Max score: 6665372
+Load factor: 0.86               Max score: 7490452
+Load factor: 0.89               Max score: 8652994
+Load factor: 0.92               Max score: 10859729
+Load factor: 0.95               Max score: 14331165
+Load factor: 0.98               Max score: 18131712
+-------------------------------------------------------------------------------------------------
+Bucket size = 512
+-------------------------------------------------------------------------------------------------
+Load factor: 0.02               Max score: 0
+Load factor: 0.05               Max score: 0
+Load factor: 0.08               Max score: 0
+Load factor: 0.11               Max score: 0
+Load factor: 0.14               Max score: 0
+Load factor: 0.17               Max score: 0
+Load factor: 0.2                Max score: 0
+Load factor: 0.23               Max score: 0
+Load factor: 0.26               Max score: 0
+Load factor: 0.29               Max score: 0
+Load factor: 0.32               Max score: 0
+Load factor: 0.35               Max score: 0
+Load factor: 0.38               Max score: 0
+Load factor: 0.41               Max score: 0
+Load factor: 0.44               Max score: 0
+Load factor: 0.47               Max score: 0
+Load factor: 0.5                Max score: 0
+Load factor: 0.53               Max score: 0
+Load factor: 0.56               Max score: 0
+Load factor: 0.59               Max score: 0
+Load factor: 0.62               Max score: 0
+Load factor: 0.65               Max score: 0
+Load factor: 0.68               Max score: 0
+Load factor: 0.71               Max score: 0
+Load factor: 0.74               Max score: 0
+Load factor: 0.77               Max score: 0
+Load factor: 0.8                Max score: 0
+Load factor: 0.83               Max score: 1725118
+Load factor: 0.86               Max score: 3100400
+Load factor: 0.89               Max score: 4966776
+Load factor: 0.92               Max score: 6649843
+Load factor: 0.95               Max score: 8578466
+Load factor: 0.98               Max score: 11433222
+-------------------------------------------------------------------------------------------------
+Bucket size = 1024
+-------------------------------------------------------------------------------------------------
+Load factor: 0.02               Max score: 0
+Load factor: 0.05               Max score: 0
+Load factor: 0.08               Max score: 0
+Load factor: 0.11               Max score: 0
+Load factor: 0.14               Max score: 0
+Load factor: 0.17               Max score: 0
+Load factor: 0.2                Max score: 0
+Load factor: 0.23               Max score: 0
+Load factor: 0.26               Max score: 0
+Load factor: 0.29               Max score: 0
+Load factor: 0.32               Max score: 0
+Load factor: 0.35               Max score: 0
+Load factor: 0.38               Max score: 0
+Load factor: 0.41               Max score: 0
+Load factor: 0.44               Max score: 0
+Load factor: 0.47               Max score: 0
+Load factor: 0.5                Max score: 0
+Load factor: 0.53               Max score: 0
+Load factor: 0.56               Max score: 0
+Load factor: 0.59               Max score: 0
+Load factor: 0.62               Max score: 0
+Load factor: 0.65               Max score: 0
+Load factor: 0.68               Max score: 0
+Load factor: 0.71               Max score: 0
+Load factor: 0.74               Max score: 0
+Load factor: 0.77               Max score: 0
+Load factor: 0.8                Max score: 0
+Load factor: 0.83               Max score: 0
+Load factor: 0.86               Max score: 0
+Load factor: 0.89               Max score: 1311923
+Load factor: 0.92               Max score: 2897258
+Load factor: 0.95               Max score: 5107328
+Load factor: 0.98               Max score: 7565662
+-------------------------------------------------------------------------------------------------
+Bucket size = 2048
+-------------------------------------------------------------------------------------------------
+Load factor: 0.02               Max score: 0
+Load factor: 0.05               Max score: 0
+Load factor: 0.08               Max score: 0
+Load factor: 0.11               Max score: 0
+Load factor: 0.14               Max score: 0
+Load factor: 0.17               Max score: 0
+Load factor: 0.2                Max score: 0
+Load factor: 0.23               Max score: 0
+Load factor: 0.26               Max score: 0
+Load factor: 0.29               Max score: 0
+Load factor: 0.32               Max score: 0
+Load factor: 0.35               Max score: 0
+Load factor: 0.38               Max score: 0
+Load factor: 0.41               Max score: 0
+Load factor: 0.44               Max score: 0
+Load factor: 0.47               Max score: 0
+Load factor: 0.5                Max score: 0
+Load factor: 0.53               Max score: 0
+Load factor: 0.56               Max score: 0
+Load factor: 0.59               Max score: 0
+Load factor: 0.62               Max score: 0
+Load factor: 0.65               Max score: 0
+Load factor: 0.68               Max score: 0
+Load factor: 0.71               Max score: 0
+Load factor: 0.74               Max score: 0
+Load factor: 0.77               Max score: 0
+Load factor: 0.8                Max score: 0
+Load factor: 0.83               Max score: 0
+Load factor: 0.86               Max score: 0
+Load factor: 0.89               Max score: 0
+Load factor: 0.92               Max score: 412173
+Load factor: 0.95               Max score: 2447576
+Load factor: 0.98               Max score: 5177205
+-------------------------------------------------------------------------------------------------
+Test probing time when hashtable is full for different bucket size
+Capacity: 64 * 1024 * 1024              key number per operation: 1048576       dim 16 B
+-------------------------------------------------------------------------------------------------
+Bucket size = 8         Elapse time 0.621568 ms
+Bucket size = 16                Elapse time 0.621568 ms
+Bucket size = 32                Elapse time 0.812032 ms
+Bucket size = 64                Elapse time 0.98304 ms
+Bucket size = 128               Elapse time 1.27283 ms
+Bucket size = 256               Elapse time 1.82477 ms
+Bucket size = 512               Elapse time 2.8887 ms
+Bucket size = 1024              Elapse time 4.91315 ms
+Bucket size = 2048              Elapse time 8.76237 ms

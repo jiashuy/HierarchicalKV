@@ -503,10 +503,10 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
       V* v_dst = values + key_idx_grid * dim;
       __pipeline_wait_prior(3);
       if (found_flag > 0) {
-        S score_ = CopyScore::lgs(sm_target_scores + key_idx_block);
+        // S score_ = CopyScore::lgs(sm_target_scores + key_idx_block);
         CopyValue::lds_stg(rank, v_dst, v_src, dim);
-        founds[key_idx_grid] = true;
-        CopyScore::stg(scores + key_idx_grid, score_);
+        // founds[key_idx_grid] = true;
+        // CopyScore::stg(scores + key_idx_grid, score_);
       }
     }
   }  // End loop
@@ -553,10 +553,10 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
     int found_flag = sm_founds[key_idx_block];
     __pipeline_wait_prior(1);
     if (found_flag > 0) {
-      S score_ = CopyScore::lgs(sm_target_scores + key_idx_block);
+      // S score_ = CopyScore::lgs(sm_target_scores + key_idx_block);
       CopyValue::lds_stg(rank, v_dst, v_src, dim);
-      founds[key_idx_grid] = true;
-      CopyScore::stg(scores + key_idx_grid, score_);
+      // founds[key_idx_grid] = true;
+      // CopyScore::stg(scores + key_idx_grid, score_);
     }
   }
 
@@ -569,10 +569,21 @@ __global__ void lookup_kernel_with_io_pipeline_v2(
     int found_flag = sm_founds[key_idx_block];
     __pipeline_wait_prior(0);
     if (found_flag > 0) {
-      S score_ = CopyScore::lgs(sm_target_scores + key_idx_block);
+      // S score_ = CopyScore::lgs(sm_target_scores + key_idx_block);
       CopyValue::lds_stg(rank, v_dst, v_src, dim);
-      founds[key_idx_grid] = true;
-      CopyScore::stg(scores + key_idx_grid, score_);
+      // founds[key_idx_grid] = true;
+      // CopyScore::stg(scores + key_idx_grid, score_);
+    }
+  }
+  int block_base = blockIdx.x * blockDim.x;
+  if (rank < loop_num) {
+    int idx_block = groupID * GROUP_SIZE + rank;
+    int found_flag = sm_founds[idx_block];
+    S score_ = CopyScore::lgs(sm_target_scores + idx_block);
+    int idx_grid = block_base + idx_block;
+    if (found_flag == 1) {
+      founds[idx_grid] = true;
+      CopyScore::stg(scores + idx_grid, score_);
     }
   }
 }  // End function
