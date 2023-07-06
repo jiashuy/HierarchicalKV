@@ -37,17 +37,23 @@ __forceinline__ __device__ int same_buf(int i) { return (i & 0x01) ^ 0; }
 // if i % 2 == 0, select buffer 1, else buffer 0
 __forceinline__ __device__ int diff_buf(int i) { return (i & 0x01) ^ 1; }
 
-template <typename K>
-__forceinline__ __device__ uint8_t empty_digest() {
+template <typename K, typename D = uint8_t>
+__forceinline__ __device__ D empty_digest() {
   const K hashed_key = Murmur3HashDevice(static_cast<K>(EMPTY_KEY));
-  return static_cast<uint8_t>(hashed_key >> 32);
+  return static_cast<D>(hashed_key >> 32);
 }
 
-template <typename K>
-__forceinline__ __device__ uint8_t get_digest(const K& key) {
+template <typename K, typename D = uint8_t>
+__forceinline__ __device__ D get_digest(const K& key) {
   const K hashed_key = Murmur3HashDevice(key);
-  return static_cast<uint8_t>(hashed_key >> 32);
+  return static_cast<D>(hashed_key >> 32);
 }
+
+template <typename K, typename D = uint8_t>
+__forceinline__ __device__ D digest_from_hashed(const K& hashed_key) {
+  return static_cast<D>(hashed_key >> 32);
+}
+
 
 template <typename K>
 __forceinline__ __device__ uint16_t get_digest_16(const K& key) {

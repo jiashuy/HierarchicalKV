@@ -57,6 +57,7 @@ enum class API_Select {
   copying_origin = 23,
   copying_pass_by_param = 24, 
   copying_multi_value = 25,
+  filter_lookup_prefetch_aggressively = 26,
 };
 
 enum class Hit_Mode {

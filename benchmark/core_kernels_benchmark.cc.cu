@@ -59,8 +59,8 @@ A100 40G:　 1555  GB/s
 3090    :   936.2 GB/s
 */
 constexpr float PeakBW = 2039.0f;
-constexpr uint32_t REPEAT = 5;
-constexpr uint32_t WARMUP = 20;
+constexpr uint32_t REPEAT = 1;
+constexpr uint32_t WARMUP = 5;
 constexpr double EPSILON = 1e-3;
 constexpr int PRECISION = 3;
 constexpr TimeUnit tu = TimeUnit::MilliSecond;
@@ -162,6 +162,7 @@ struct TestDescriptor_ {
       case API_Select::copying_origin:
       case API_Select::copying_pass_by_param:
       case API_Select::copying_multi_value:
+      case API_Select::filter_lookup_prefetch_aggressively:
       case API_Select::assign: {
         return SOL<V, API_Select::find>::get(elapsed_time, key_num_per_op, 
                                              dim, hit_rate);
@@ -339,7 +340,7 @@ float test_one_api(const API_Select api, TestDescriptor& td,
                         cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemcpy(d_scores, h_scores, key_num_per_op * sizeof(S),
                         cudaMemcpyHostToDevice));
-  if (sample_hit_rate) {
+  if (sample_hit_rate && api != API_Select::insert_and_evict) {
     table->find(key_num_per_op, d_keys, d_vectors, d_found, nullptr, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
@@ -362,6 +363,8 @@ float test_one_api(const API_Select api, TestDescriptor& td,
   CUDA_CHECK(cudaMalloc(&values_addr, key_num_per_op * sizeof(V*)));
   int * times_host;
   CUDA_CHECK(cudaMallocHost(&times_host, sizeof(int) * key_num_per_op));
+  
+  size_t evicted_number = 0;
 
   cudaProfilerStart();
   switch (api) {
@@ -859,6 +862,23 @@ float test_one_api(const API_Select api, TestDescriptor& td,
       CUDA_CHECK(cudaStreamSynchronize(stream));
       break;
     }
+    case API_Select::filter_lookup_prefetch_aggressively: {
+      timer.start();
+      if (options.dim == 4) {
+        lookup_kernel_with_io_filter<K, V, S, float4, 1, 64>
+            <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+              table_core->buckets, (int)(options.max_bucket_size), table_core->buckets_num, static_cast<int>(options.dim/4), 
+              d_keys, reinterpret_cast<float4*>(d_vectors), d_scores, d_found, key_num_per_op);
+      } else if (options.dim == 128) {
+        lookup_kernel_with_io_filter<K, V, S, float4, 32, 64>
+             <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+              table_core->buckets, (int)(options.max_bucket_size), table_core->buckets_num, static_cast<int>(options.dim/4), 
+              d_keys, reinterpret_cast<float4*>(d_vectors), d_scores, d_found, key_num_per_op);
+      }
+      timer.end();
+      CUDA_CHECK(cudaStreamSynchronize(stream));
+      break;
+    }
     case API_Select::find: {
       timer.start();
       //////////////////////////////////////////////////////////////////////////////////////
@@ -926,11 +946,11 @@ float test_one_api(const API_Select api, TestDescriptor& td,
     }
     case API_Select::insert_and_evict: {
       timer.start();
-      table->insert_and_evict(key_num_per_op, d_keys, d_vectors, d_scores,
+      evicted_number = table->insert_and_evict(key_num_per_op, d_keys, d_vectors, d_scores,
                               d_evict_keys, d_vect_contrast, d_evict_scores,
                               stream);
-      CUDA_CHECK(cudaStreamSynchronize(stream));
       timer.end();
+      CUDA_CHECK(cudaStreamSynchronize(stream));
       break;
     }
     default: {
@@ -938,6 +958,9 @@ float test_one_api(const API_Select api, TestDescriptor& td,
     }
   }
   cudaProfilerStop();
+  
+  if (api == API_Select::insert_and_evict)
+    td.hit_rate = evicted_number / key_num_per_op;
 
   if (check_correctness) {
     switch (api) {
@@ -959,6 +982,7 @@ float test_one_api(const API_Select api, TestDescriptor& td,
       case API_Select::copying_origin:
       case API_Select::copying_pass_by_param:
       case API_Select::copying_multi_value:
+      case API_Select::filter_lookup_prefetch_aggressively:
       case API_Select::find: {
         bool* h_found;
         CUDA_CHECK(cudaMallocHost(&h_found, key_num_per_op * sizeof(bool)));
@@ -1172,23 +1196,29 @@ void test_bucket_size() {
   }
 }
 
-void test_by_discription(TestDescriptor& td, API_Select api) {
+void test_by_discription(TestDescriptor& td, API_Select api, bool check = false) {
   // Check correctness
-  td.load_factor = 0.02f;
+  td.load_factor = 1.0f;
   test_one_api(api, td, true, false, true);
   // Warpup
   for (int i = 0; i < WARMUP; i++) {
     test_one_api(api, td);
   }
+  bool sample_hit_rate = api == API_Select::insert_and_evict ? true : false;
   for (float lf = 0.02; lf < 1.0f; lf += 0.03) {
     td.load_factor = lf;
     std::vector<float> elapsed_time(REPEAT, 0.0f);
     for (int i = 0; i < REPEAT; i++) {
-      elapsed_time.emplace_back(test_one_api(api, td));
+      if (check) {
+        one_line();
+        elapsed_time.emplace_back(test_one_api(api, td, sample_hit_rate, true, true));
+      }
+      else
+        elapsed_time.emplace_back(test_one_api(api, td, sample_hit_rate));
     }
     float average_time = getAverage(elapsed_time);
     float tput = billionKVPerSecond(average_time, td.key_num_per_op);
-    float sol = td.getSOL(api, average_time);
+    float sol = td.getSOL(api, average_time, td.hit_rate);
     
     std::cout << "Load factor " << lf << "\t"
               << average_time << " ms \t\t" 
@@ -1657,6 +1687,68 @@ void test_copying_kernel() {
   // test_by_discription(td, API_Select::copying_multi_value_prefetch);
 }
 
+void test_lookup_filter_prefetch_aggressively() {
+  TestDescriptor td;
+  td.capacity = 64 * 1024 * 1024UL;
+  td.key_num_per_op = 1024 * 1024UL;
+  td.load_factor = 1.0f;
+  td.hit_rate = 1.0f;
+  td.hit_mode = Hit_Mode::last_insert;
+
+  two_lines();
+  std::cout << "Test filter lookup (prefetch aggressively)\n";
+  two_lines();
+
+  td.dim = 4;
+  two_lines();
+  std::cout << "Capacity = 64 * 1024 * 1024 \t"
+            << "Batch = 1024 * 1024 \t"
+            << "Key = 64 bits \t"
+            << "Value = 16 B\n";
+  two_lines();
+  test_by_discription(td, API_Select::filter_lookup_prefetch_aggressively);
+
+  td.dim = 128;
+  two_lines();
+  std::cout << "Capacity = 64 * 1024 * 1024 \t"
+            << "Batch = 1024 * 1024 \t"
+            << "Key = 64 bits \t"
+            << "Value = 512 B\n";
+  two_lines();
+  test_by_discription(td, API_Select::filter_lookup_prefetch_aggressively);
+}
+
+void test_insert_and_evict() {
+  TestDescriptor td;
+  td.capacity = 64 * 1024 * 1024UL;
+  td.key_num_per_op = 1024 * 1024UL;
+  td.load_factor = 1.0f;
+  td.hit_rate = 1.0f;
+  td.hit_mode = Hit_Mode::last_insert;
+
+  two_lines();
+  std::cout << "Test insert_and_evict: 1 thread probing, group reduction, copying\n";
+  two_lines();
+
+  td.dim = 4;
+  two_lines();
+  std::cout << "Capacity = 64 * 1024 * 1024 \t"
+            << "Batch = 1024 * 1024 \t"
+            << "Key = 64 bits \t"
+            << "Value = 16 B\n";
+  two_lines();
+  test_by_discription(td, API_Select::insert_and_evict);
+
+  td.dim = 128;
+  two_lines();
+  std::cout << "Capacity = 64 * 1024 * 1024 \t"
+            << "Batch = 1024 * 1024 \t"
+            << "Key = 64 bits \t"
+            << "Value = 512 B\n";
+  two_lines();
+  test_by_discription(td, API_Select::insert_and_evict);
+}
+
 int main(int argc, char* argv[]) {
   try {
     {
@@ -1684,7 +1776,11 @@ int main(int argc, char* argv[]) {
       ///TODO:
       // test_pipeline_bucket_size();
 
-      test_copying_kernel();
+      // test_copying_kernel();
+
+      // test_lookup_filter_prefetch_aggressively();
+
+      test_insert_and_evict();
 
 
       // TestDescriptor td;

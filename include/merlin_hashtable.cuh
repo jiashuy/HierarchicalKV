@@ -471,18 +471,24 @@ class HashTable {
     CUDA_CHECK(
         cudaMemsetAsync(d_offsets, 0, n_offsets * sizeof(int64_t), stream));
     CUDA_CHECK(cudaMemsetAsync(dn_evicted, 0, sizeof(size_type), stream));
-    CUDA_CHECK(cudaMemsetAsync(d_masks, 0, n * sizeof(bool), stream));
-
     size_type block_size = options_.block_size;
     size_type grid_size = SAFE_GET_GRID_SIZE(n, block_size);
-    CUDA_CHECK(cudaMemsetAsync(evicted_keys, static_cast<int>(EMPTY_KEY),
-                               n * sizeof(K), stream));
-
-    Selector::execute_kernel(
-        load_factor, options_.block_size, options_.max_bucket_size,
-        table_->buckets_num, options_.dim, stream, n, d_table_, keys, values,
-        scores, evicted_keys, evicted_values, evicted_scores);
-
+      CUDA_CHECK(cudaMemsetAsync(d_masks, 0, n * sizeof(bool), stream));
+      CUDA_CHECK(cudaMemsetAsync(evicted_keys, static_cast<int>(EMPTY_KEY),
+                                n * sizeof(K), stream));
+    if (false && options_.max_bucket_size == 128) {
+      // constexpr uint32_t BLOCK_SIZE = 128;
+      // upsert_and_evict_kernel_with_io_filter_unique<key_type, value_type, score_type>
+      //   <<<(n + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //     table_->buckets, table_->buckets_size, options_.max_bucket_size, 
+      //     table_->buckets_num, options_.dim, keys, values,
+      //     scores, evicted_keys, evicted_values, evicted_scores, d_masks, n);
+    } else {
+      Selector::execute_kernel(
+          load_factor, options_.block_size, options_.max_bucket_size,
+          table_->buckets_num, options_.dim, stream, n, d_table_, keys, values,
+          scores, evicted_keys, evicted_values, evicted_scores);
+    }
     keys_not_empty<K>
         <<<grid_size, block_size, 0, stream>>>(evicted_keys, d_masks, n);
     size_type n_evicted = 0;

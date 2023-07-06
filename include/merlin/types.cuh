@@ -55,11 +55,12 @@ using AtomicPos = cuda::atomic<T, cuda::thread_scope_device>;
 
 template <class K, class V, class S>
 struct Bucket {
+  using D = uint8_t;
   AtomicKey<K>* keys_;
   /// TODO: compute the pointer of scores and digests using bucket_max_size
   AtomicScore<S>* scores_;
   /// @brief not visible to users
-  uint8_t* digests_;
+  D* digests_;
   uint16_t* digests_16;
   V* vectors;  // Pinned memory or HBM
 
@@ -74,7 +75,7 @@ struct Bucket {
   AtomicScore<S> min_score;
   AtomicPos<int> min_pos;
 
-  __forceinline__ __device__ uint8_t* digests(int index) const {
+  __forceinline__ __device__ D* digests(int index) const {
     return digests_ + index;
   }
 
@@ -88,6 +89,31 @@ struct Bucket {
 
   __forceinline__ __device__ K** keys_addr() {
     return reinterpret_cast<K**>(&keys_);
+  }
+
+  __forceinline__ __device__ K** keys_ptr() {
+    return reinterpret_cast<K**>(&keys_);
+  }
+
+  __forceinline__ __device__ V** values_ptr() {
+    return reinterpret_cast<V**>(&vectors);
+  }
+
+  __forceinline__ __device__ K* keys() {
+    return reinterpret_cast<K*>(keys_);
+  }
+
+  __forceinline__ __device__ V* values() {
+    return vectors;
+  }
+
+  static __forceinline__ __device__ D* digests(K* keys, uint32_t bucket_capacity) {
+    bucket_capacity = bucket_capacity < 128 ? 128 : bucket_capacity;
+    return reinterpret_cast<D*>(keys) - bucket_capacity;
+  }
+
+  static __forceinline__ __device__ S* scores(K* keys, uint32_t bucket_capacity) {
+    return reinterpret_cast<S*>(keys + bucket_capacity);
   }
 };
 
@@ -216,6 +242,7 @@ enum class OccupyResult {
   DUPLICATE,  ///< Insert did not succeed, key is already present
   EVICT,      ///< Insert succeeded by evicting one key with minimum score.
   REFUSED,    ///< Insert did not succeed, insert score is too low.
+  ILLEGAL,
 };
 
 enum class OverrideResult {

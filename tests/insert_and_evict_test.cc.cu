@@ -668,7 +668,7 @@ void test_insert_and_evict_run_with_batch_find() {
   constexpr size_t batch_num = 256;
   constexpr size_t find_interval = 8;
 
-  const bool if_check = false;
+  const bool if_check = true;
 
   std::thread insert_and_evict_thread;
   std::thread find_thread;
