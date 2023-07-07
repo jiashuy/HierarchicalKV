@@ -28,6 +28,89 @@ static __forceinline__ __device__ S device_nano() {
   return mclk;
 }
 
+template <
+typename K = uint64_t,
+typename V = float,
+typename S = uint64_t,
+typename VecV = float4,
+typename D = uint8_t,
+typename VecD = uint4,
+uint32_t BUCKET_SIZE = 128,
+uint32_t BLOCK_SIZE = 128,
+uint32_t GROUP_SIZE = 32
+uint32_t BUF_V = 64>
+__global__ void upsert_and_evict_kernel_pipeline_unique(
+  Bucket<K, V, S>* buckets, int32_t* buckets_size, const uint64_t buckets_num, 
+  const uint32_t dim, const K* __restrict keys, const V* __restrict values, 
+  const S* __restrict scores, K* __restrict evicted_keys, V* __restrict evicted_values,
+  S* __restrict evicted_scores, uint32_t n) {
+  using BKT = Bucket<K, V, S>;
+  constexpr VecD_SIZE = sizeof(VecD) / sizeof(D);
+  constexpr uint32_t GROUP_NUM = BLOCK_SIZE / GROUP_SIZE;
+  __shared__ D sm_bucket_digests[GROUP_NUM][2][BUCKET_SIZE];
+  __shared__ S sm_bucket_scores[GROUP_NUM][2][BUCKET_SIZE];
+  __shared__ V sm_values_buffer[GROUP_NUM][2][BUF_V];
+
+  // Initialization.
+  auto g = cg::tiled_partition<GROUP_SIZE>(cg::this_thread_block());
+  uint32_t kv_idx = blockIdx.x * blockDim.x + threadIdx.x;
+  K key;
+  S score;
+  D digest;
+  uint64_t bkt_idx = 0;
+  uint32_t start_idx = 0;
+  K* bucket_keys_ptr {nullptr};
+  V* bucket_values_ptr {nullptr};
+  uint32_t bucket_size = 0;
+  OccupyResult occupy_result{OccupyResult::INITIAL};
+  uint32_t key_pos = 0;
+  if (kv_idx < n && ) {
+    key = keys[kv_idx];
+    if (!IS_RESERVED_KEY(insert_key)) {
+      score =
+        scores != nullptr ? scores[kv_idx] : static_cast<S>(MAX_SCORE);
+      const K hashed_key = Murmur3HashDevice(key);
+      digest = digest_from_hashed<K>(hashed_key);
+      uint64_t global_idx = static_cast<uint64_t>(
+          hashed_key % (buckets_num * BUCKET_SIZE));
+      bkt_idx = global_idx / BUCKET_SIZE;
+      start_idx = global_idx & (BUCKET_SIZE - 1);
+      Bucket<K, V, S>* bucket = buckets + bkt_idx;
+      bucket_keys_ptr = bucket->keys();
+      bucket_values_ptr = bucket->values();
+      bucket_size = buckets_size[bkt_idx];
+    } else {
+      occupy_result = OccupyResult::ILLEGAL;
+    }
+  } else {
+    occupy_result = OccupyResult::ILLEGAL;
+  }
+
+  uint32_t rank = g.thread_rank();
+  uint32_t groupID = threadIdx.x / GROUP_SIZE;
+  for (int32_t i = 0; i < GROUP_SIZE; i++) {
+    auto occupy_result_cur = g.shfl(occupy_result, i);
+    if (occupy_result_cur == OccupyResult::INITIAL) {
+      D* dst = sm_bucket_digests[groupID][0];
+      auto keys_ptr_cur = g.shfl(bucket_keys_ptr, i);
+      D* src = BKT::digests(keys_ptr_cur, BUCKET_SIZE);
+      if (rank * VecD_SIZE < BUCKET_SIZE)
+        __pipeline_memcpy_async(dst + rank * VecD_SIZE, 
+                                src + rank * VecD_SIZE, sizeof(VecD));
+    }
+    __pipeline_commit();
+    __pipeline_wait_prior(0);
+    if (occupy_result_cur == OccupyResult::INITIAL) {
+      D* src = sm_bucket_digests[groupID][0];
+      uint32_t digests_ = reinterpret_cast<uint32_t>(src)[rank];
+      
+
+    }
+
+  }
+
+}
+
 template <class K, class V, class S, uint32_t GROUP_SIZE = 4>
 __global__ void upsert_and_evict_kernel_with_io_core_beta(
     const Table<K, V, S>* __restrict table, const size_t bucket_max_size,
@@ -44,7 +127,12 @@ __global__ void upsert_and_evict_kernel_with_io_core_beta(
   constexpr uint32_t VALUE_PER_BUF = 2;
   constexpr uint32_t BUF_V = GROUP_BUF / VALUE_PER_BUF / BUF_NUM / sizeof(V);
 
+  constexpr uint32_t GROUP_BUF_S = GROUP_BUF / sizeof(S);
+  constexpr uint32_t BUCKET_S = GROUP_BUF_S / 2;
+
   __shared__ V sm_values[GROUP_NUM][BUF_NUM][VALUE_PER_BUF][BUF_V];
+
+  S* sm_scores = (S*)sm_values;
 
   auto g = cg::tiled_partition<GROUP_SIZE>(cg::this_thread_block());
   int* buckets_size = table->buckets_size;
@@ -143,125 +231,112 @@ __global__ void upsert_and_evict_kernel_with_io_core_beta(
     occupy_result = OccupyResult::CONTINUE; 
   }
 REDUCE:
-  for (int i = 0; i < GROUP_SIZE; i ++) {
-    auto occupy_result_cur = g.shfl(occupy_result, i);
-    if (occupy_result_cur != OccupyResult::CONTINUE) continue;
-    
-    K expected_key = static_cast<K>(EMPTY_KEY);
-
-    AtomicKey<K>* current_key;
-    AtomicScore<S>* current_score;
-
-    K local_min_score_key = static_cast<K>(EMPTY_KEY);
-
-    S local_min_score_val = MAX_SCORE;
-    S temp_min_score_val = MAX_SCORE;
-    S global_min_score_val;
-    int local_min_score_pos = -1;
-    int key_pos_local;
-    K evicted_key_local;
-
-    unsigned vote = 0;
-    bool result = false;
-    do {
-      expected_key = static_cast<K>(EMPTY_KEY);
-
-      local_min_score_key = static_cast<K>(EMPTY_KEY);
-
-      local_min_score_val = MAX_SCORE;
-      temp_min_score_val = MAX_SCORE;
-      local_min_score_pos = -1;
-
-      vote = 0;
-      result = false;
-      auto start_idx_cur = g.shfl(start_idx, i);
-      auto bucket_cur = g.shfl(bucket, i);
-
-      for (uint32_t tile_offset = 0; tile_offset < bucket_max_size;
-          tile_offset += GROUP_SIZE) {
-        key_pos_local = (start_idx_cur + tile_offset + g.thread_rank()) % bucket_max_size;
-
-        current_score = bucket_cur->scores(key_pos_local);
-
-        // Step 4: record min score location.
-        temp_min_score_val = current_score->load(cuda::std::memory_order_relaxed);
-        if (temp_min_score_val < local_min_score_val) {
-          expected_key =
-              bucket_cur->keys(key_pos_local)->load(cuda::std::memory_order_relaxed);
-          if (expected_key != static_cast<K>(LOCKED_KEY) &&
-              expected_key != static_cast<K>(EMPTY_KEY)) {
-            local_min_score_key = expected_key;
-            local_min_score_val = temp_min_score_val;
-            local_min_score_pos = key_pos_local;
-          }
+  uint32_t groupID = threadIdx.x / GROUP_SIZE;
+  // Get the KV-pair with min score and evict it.
+  uint32_t reduce_mask = g.ballot(occupy_result == OccupyResult::CONTINUE);
+  int rank_next = __ffs(reduce_mask) - 1;
+  if (rank_next >= 0) {
+    S* dst = sm_scores + groupID * GROUP_BUF_S;
+    auto bucket_next = g.shfl(bucket, rank_next);
+    auto src = bucket_next->scores(0);
+    int rank = g.thread_rank();
+    __pipeline_memcpy_async(dst + rank * 2, 
+                            src + rank * 2, sizeof(uint4));
+    __pipeline_memcpy_async(dst + rank * 2 + bucket_max_size / 2,
+                            src + rank * 2 + bucket_max_size / 2, sizeof(uint4));
+  }
+  __pipeline_commit();
+  int i = -1;
+  int rank = g.thread_rank();
+  while (reduce_mask != 0) {
+    i += 1;
+    int rank_cur = __ffs(reduce_mask) - 1;
+    reduce_mask &= (reduce_mask - 1);
+    int rank_next = __ffs(reduce_mask) - 1;
+    if (rank_next >= 0) {
+      S* dst = sm_scores + groupID * GROUP_BUF_S + diff_buf(i) * BUCKET_S;
+      auto bucket_next = g.shfl(bucket, rank_next);
+      auto src = bucket_next->scores(0);
+      __pipeline_memcpy_async(dst + rank * 2, 
+                              src + rank * 2, sizeof(uint4));
+      __pipeline_memcpy_async(dst + rank * 2 + bucket_max_size / 2,
+                              src + rank * 2 + bucket_max_size / 2, sizeof(uint4));
+    }
+    __pipeline_commit();
+    __pipeline_wait_prior(1);
+    auto  occupy_result_cur = g.shfl(occupy_result, rank_cur);
+    S* dst = sm_scores + groupID * GROUP_BUF_S + same_buf(i) * BUCKET_S;
+    auto bucket_cur = g.shfl(bucket, rank_cur);
+    auto src = bucket_cur->scores(0);
+    while (occupy_result_cur == OccupyResult::CONTINUE) {
+      int min_pos_local = -1;
+      S min_score_local = MAX_SCORE;
+      for (int j = rank; j < bucket_max_size; j += GROUP_SIZE) {
+        S temp_score = dst[j];
+        if (temp_score < min_score_local) {
+          min_score_local = temp_score;
+          min_pos_local = j;
         }
       }
-      // Step 5: insert by evicting some one.
-      global_min_score_val =
-          cg::reduce(g, local_min_score_val, cg::less<S>());
-      auto insert_score_cur = g.shfl(insert_score, i);
-      if (insert_score_cur < global_min_score_val) {
-        if (g.thread_rank() == i) {
+      const S min_score_global =
+          cg::reduce(g, min_score_local, cg::less<S>());
+
+      auto insert_score_cur = g.shfl(insert_score, rank_cur);
+      if (insert_score_cur < min_score_global) {
+        if (rank == rank_cur) {
           occupy_result = OccupyResult::REFUSED;
           if (evicted_scores != nullptr && scores != nullptr) {
-            evicted_scores[key_idx] = scores[key_idx];
+            evicted_scores[key_idx] = insert_score;
           }
-          evicted_keys[key_idx] = keys[key_idx];
+          evicted_keys[key_idx] = insert_key;
         }
-        goto FINISH;
+        break;
       }
-      vote = g.ballot(local_min_score_val <= global_min_score_val);
+      uint32_t vote = g.ballot(min_score_local <= min_score_global);
       if (vote) {
-        int src_lane_cur = __ffs(vote) - 1;
-        result = false;
-        if (src_lane_cur == g.thread_rank()) {
-          // TBD: Here can be compare_exchange_weak. Do benchmark.
-          current_key = bucket_cur->keys(local_min_score_pos);
-          current_score = bucket_cur->scores(local_min_score_pos);
-          evicted_key_local = local_min_score_key;
-          result = current_key->compare_exchange_strong(
-              local_min_score_key, static_cast<K>(LOCKED_KEY),
-              cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
-
-          // Need to recover when fail.
-          if (result && (current_score->load(cuda::std::memory_order_relaxed) >
-                        global_min_score_val)) {
-            current_key->store(local_min_score_key,
-                              cuda::std::memory_order_relaxed);
-            result = false;
+        int src_lane = __ffs(vote) - 1;
+        int min_pos_global = g.shfl(min_pos_local, src_lane);
+        if (rank == rank_cur) {
+          dst[min_pos_global] = MAX_SCORE; // Mark visited.
+          auto min_score_key = bucket_cur->keys(min_pos_global);
+          auto expected_key = min_score_key->load(cuda::std::memory_order_relaxed);
+          if (expected_key == static_cast<K>(LOCKED_KEY) ||
+            expected_key == static_cast<K>(EMPTY_KEY)) {
+            goto FINISH;
           }
-        }
-        result = g.shfl(result, src_lane_cur);
-        if (result) {
-          // Not every `evicted_key` is correct expect the `src_lane` thread.
-          key_pos_local = g.shfl(local_min_score_pos, src_lane_cur);
-          evicted_key_local = g.shfl(evicted_key_local, src_lane_cur);
-          if (g.thread_rank() == i) {
-            evicted_key = evicted_key_local;
-            key_pos = key_pos_local;
-            if (evicted_key == static_cast<K>(RECLAIM_KEY)) {
-              atomicAdd(&(buckets_size[bkt_idx]), 1);
-              occupy_result = OccupyResult::OCCUPIED_RECLAIMED;
-            } else {
-              occupy_result = OccupyResult::EVICT;
-              evicted_keys[key_idx] = evicted_key;
-              if (scores != nullptr) {
-                evicted_scores[key_idx] = global_min_score_val;
-              }
+          auto min_score_ptr = bucket_cur->scores(min_pos_global);
+          bool result = min_score_key->compare_exchange_strong(
+            expected_key, static_cast<K>(LOCKED_KEY),
+            cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+          if (!result) {
+            goto FINISH;
+          }
+          if (min_score_ptr->load(cuda::std::memory_order_relaxed) >
+                    min_score_global) {
+            min_score_key->store(expected_key,
+                        cuda::std::memory_order_relaxed);
+            goto FINISH;
+          }
+          evicted_key = expected_key;
+          key_pos = min_pos_global;
+          if (evicted_key == static_cast<K>(RECLAIM_KEY)) {
+            atomicAdd(&(buckets_size[bkt_idx]), 1);
+            occupy_result = OccupyResult::OCCUPIED_RECLAIMED;
+          } else {
+            occupy_result = OccupyResult::EVICT;
+            evicted_keys[key_idx] = evicted_key;
+            if (scores != nullptr) {
+              evicted_scores[key_idx] = min_score_global;
             }
-            update_score(bucket, key_pos, scores, key_idx);
-            bucket->digests(key_pos)[0] = get_digest<K>(insert_key);
           }
-          goto FINISH;
-        } 
-      } 
-      occupy_result_cur = OccupyResult::CONTINUE;
+          update_score(bucket, key_pos, scores, key_idx);
+          bucket->digests(key_pos)[0] = get_digest<K>(insert_key);
+        }
 FINISH:
-      occupy_result_cur = g.shfl(occupy_result, i);
-    } while (occupy_result_cur == OccupyResult::CONTINUE);
+        occupy_result_cur = g.shfl(occupy_result, rank_cur);
+      }
+    }
   }
-
-  uint32_t groupID = threadIdx.x / GROUP_SIZE;
   auto occupy_result_next = g.shfl(occupy_result, 0);
   if (occupy_result_next != OccupyResult::ILLEGAL) {
     auto insert_value_next = g.shfl(insert_value, 0);
