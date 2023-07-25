@@ -23,7 +23,7 @@
 #include "merlin_localfile.hpp"
 #include "test_util.cuh"
 
-constexpr size_t dim = 4;
+constexpr size_t dim = 32;
 using i64 = int64_t;
 using u64 = uint64_t;
 using f32 = float;

@@ -386,160 +386,325 @@ uint32_t BUCKET_SIZE = 128,
 uint32_t BLOCK_SIZE = 64,
 uint32_t GROUP_SIZE = 8,
 uint32_t BUF_V = 64>
-__global__ void upsert_and_evict_kernel_unique_v3(
+__global__ void upsert_and_evict_kernel_unique_v4(
   Bucket<K, V, S>* buckets, int32_t* buckets_size, const uint64_t buckets_num, 
   const uint32_t dim, const K* __restrict keys, const V* __restrict values, 
   const S* __restrict scores, K* __restrict evicted_keys, V* __restrict evicted_values,
   S* __restrict evicted_scores, uint32_t n, size_t* evict_number) {
-
-  uint32_t kv_idx = blockIdx.x * blockDim.x + threadIdx.x;
-  if (kv_idx >= n) return;
-  int key_pos = -1;
-  const K insert_key = keys[kv_idx];
-  if (IS_RESERVED_KEY(insert_key)) return;
-
-  const S insert_score =
-      scores != nullptr ? scores[kv_idx] : static_cast<S>(MAX_SCORE);
-  const V* insert_value = values + kv_idx * dim;
-
-  const K hashed_key = Murmur3HashDevice(insert_key);
-  const size_t global_idx = hashed_key % (buckets_num * BUCKET_SIZE);
-  size_t bkt_idx = global_idx / BUCKET_SIZE;
-  uint32_t start_idx = global_idx % BUCKET_SIZE;
-  Bucket<K, V, S>* bucket = buckets + bkt_idx;
   
+  using BKT = Bucket<K, V, S>;
+  uint32_t tx = threadIdx.x;
+  uint32_t kv_idx = blockIdx.x * blockDim.x + tx;
+
+  K key {static_cast<K>(EMPTY_KEY)};
+  S score {static_cast<S>(EMPTY_SCORE)};
+  K* bucket_keys_ptr {nullptr};
+  V* bucket_values_ptr {nullptr};
+  uint32_t key_pos = {0};
+  uint32_t evict_idx {0};
+  int32_t* bucket_size_ptr {nullptr};
   OccupyResult occupy_result{OccupyResult::INITIAL};
-  const int bucket_size = buckets_size[bkt_idx];
+  if (kv_idx < n) {
+    key = keys[kv_idx];
+    score = scores != nullptr ? scores[kv_idx] : device_nano<S>();
+    if (!IS_RESERVED_KEY(key)) {
+      const K hashed_key = Murmur3HashDevice(key);
+      uint64_t global_idx = static_cast<uint64_t>(
+          hashed_key % (buckets_num * BUCKET_SIZE));
+      key_pos = global_idx & (BUCKET_SIZE - 1);
+      uint64_t bkt_idx = global_idx / BUCKET_SIZE;
+      bucket_size_ptr = buckets_size + bkt_idx;
+      BKT* bucket = buckets + bkt_idx;
+      bucket_keys_ptr = bucket->keys();
+      bucket_values_ptr = bucket->values();
+    } else {
+      return;
+    }
+  } else {
+    return;
+  }
 
-  AtomicKey<K>* current_key;
-  AtomicScore<S>* current_score;
-  K local_min_score_key = static_cast<K>(EMPTY_KEY);
-  S local_min_score_val = MAX_SCORE;
-  S temp_min_score_val = MAX_SCORE;
-  int local_min_score_pos = -1;
-
-  unsigned vote = 0;
-  bool result = false;
-
-  for (uint32_t tile_offset = 0; tile_offset < BUCKET_SIZE;
-       tile_offset += 1) {
-    key_pos = (start_idx + tile_offset) % BUCKET_SIZE;
-    current_key = bucket->keys(key_pos);
-
-    K expected_key = insert_key;
+  for (int offset = 0; offset < BUCKET_SIZE; offset += 1) {
+    uint32_t pos_cur = (key_pos + offset) & (BUCKET_SIZE - 1);
+    bool result = false;
+    auto current_key = BKT::keys(bucket_keys_ptr, pos_cur);
+    K expected_key = key;
+    __threadfence();
     result = current_key->compare_exchange_strong(
         expected_key, static_cast<K>(LOCKED_KEY),
         cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
+    __threadfence();
     if (result) {
       occupy_result = OccupyResult::DUPLICATE;
+      key_pos = pos_cur;
+      S* dst_score = BKT::scores(bucket_keys_ptr, BUCKET_SIZE, key_pos);
+      D* dst_digest = BKT::digests(bucket_keys_ptr, BUCKET_SIZE, key_pos);
+      *dst_digest = get_digest<K>(key);
+      *dst_score = score;
       break;
     } else if (expected_key == static_cast<K>(EMPTY_KEY)) {
-      K expected_key = static_cast<K>(EMPTY_KEY);
+      __threadfence();
       result = current_key->compare_exchange_strong(
           expected_key, static_cast<K>(LOCKED_KEY),
           cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
+      __threadfence();
       if (result) {
         occupy_result = OccupyResult::OCCUPIED_EMPTY;
+        key_pos = pos_cur;
+        S* dst_score = BKT::scores(bucket_keys_ptr, BUCKET_SIZE, key_pos);
+        D* dst_digest = BKT::digests(bucket_keys_ptr, BUCKET_SIZE, key_pos);
+        *dst_digest = get_digest<K>(key);
+        *dst_score = score;
+        atomicAdd(bucket_size_ptr, 1);
         break;
       }
     }
   }
+  if (occupy_result == OccupyResult::INITIAL) {
+    evict_idx = atomicAdd(evict_number, 1);
+  }
   while (occupy_result == OccupyResult::INITIAL) {
-    for (uint32_t tile_offset = 0; tile_offset < BUCKET_SIZE;
-        tile_offset += 1) {
-      key_pos = (start_idx + tile_offset) % BUCKET_SIZE;
-      current_score = bucket->scores(key_pos);
-
-      // Step 4: record min score location.
-      temp_min_score_val = current_score->load(cuda::std::memory_order_relaxed);
-      if (temp_min_score_val < local_min_score_val) {
-        K expected_key =
-            bucket->keys(key_pos)->load(cuda::std::memory_order_relaxed);
-        if (expected_key != static_cast<K>(LOCKED_KEY) &&
-            expected_key != static_cast<K>(EMPTY_KEY)) {
-          local_min_score_key = expected_key;
-          local_min_score_val = temp_min_score_val;
-          local_min_score_pos = key_pos;
+    int min_pos = -1;
+    S* src = BKT::scores(bucket_keys_ptr, BUCKET_SIZE, 0);
+    // auto bucket_scores_ptr = reinterpret_cast<AtomicScore<S>*>(src);
+    S min_score = MAX_SCORE;
+    for (int j = 0; j < BUCKET_SIZE; j += 1) {
+      // auto temp_score = bucket_scores_ptr[j].load(cuda::std::memory_order_relaxed);
+      S temp_score = src[j];
+      if (temp_score < min_score) {
+        min_score = temp_score;
+        min_pos = j;
+      }
+    }
+    if (score < min_score) {
+      occupy_result = OccupyResult::REFUSED;
+      evicted_keys[evict_idx] = key;
+      if (evicted_scores != nullptr) {
+        evicted_scores[evict_idx] = score;
+      }
+      break;
+    }
+    auto min_score_key = BKT::keys(bucket_keys_ptr, min_pos);
+    auto expected_key = min_score_key->load(cuda::std::memory_order_acquire);
+    if (expected_key != static_cast<K>(LOCKED_KEY) &&
+      expected_key != static_cast<K>(EMPTY_KEY)) {
+      __threadfence();
+      bool result = min_score_key->compare_exchange_strong(
+        expected_key, static_cast<K>(LOCKED_KEY),
+        cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
+      __threadfence();
+      if (result) {
+        S* min_score_ptr = BKT::scores(bucket_keys_ptr, BUCKET_SIZE, min_pos);
+        auto verify_score_ptr = reinterpret_cast<AtomicScore<S>*>(min_score_ptr);
+        auto verify_score = verify_score_ptr->load(cuda::std::memory_order_acquire);
+        if (verify_score > min_score) {
+          __threadfence();
+          min_score_key->store(expected_key,
+                      cuda::std::memory_order_release);
+          __threadfence();
+        } else {
+          key_pos = min_pos;
+          *min_score_ptr = score;
+          D* dst_digest = BKT::digests(bucket_keys_ptr, BUCKET_SIZE, key_pos);
+          *dst_digest = get_digest<K>(key);
+          if (expected_key == static_cast<K>(RECLAIM_KEY)) {
+            occupy_result = OccupyResult::OCCUPIED_RECLAIMED;
+            atomicAdd(bucket_size_ptr, 1);
+          } else {
+            occupy_result = OccupyResult::EVICT;
+            evicted_keys[evict_idx] = expected_key;
+            if (evicted_scores != nullptr) {
+              evicted_scores[evict_idx] = min_score;
+            }
+          }
         }
       }
     }
-    // Step 5: insert by evicting some one.
-    if (insert_score < local_min_score_val) {
-      occupy_result = OccupyResult::REFUSED;
-      break;
-    }
-    result = false;
-    // TBD: Here can be compare_exchange_weak. Do benchmark.
-    current_key = bucket->keys(local_min_score_pos);
-    current_score = bucket->scores(local_min_score_pos);
-    K evicted_key = local_min_score_key;
-    result = current_key->compare_exchange_strong(
-        local_min_score_key, static_cast<K>(LOCKED_KEY),
-        cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
-
-    // Need to recover when fail.
-    if (result && (current_score->load(cuda::std::memory_order_relaxed) >
-                  local_min_score_val)) {
-      current_key->store(local_min_score_key,
-                        cuda::std::memory_order_relaxed);
-      result = false;
-    }
-    if (result) {
-      // Not every `evicted_key` is correct expect the `src_lane` thread.
-      key_pos = local_min_score_pos;
-      occupy_result =  (evicted_key == static_cast<K>(RECLAIM_KEY))
-                ? OccupyResult::OCCUPIED_RECLAIMED
-                : OccupyResult::EVICT;
-      break;
-    }
   }
-
-  do {
-    if (bucket_size < BUCKET_SIZE) {
-      occupy_result = find_and_lock_when_vacant<K, V, S, TILE_SIZE>(
-          g, bucket, insert_key, insert_score, evicted_key, start_idx,
-          key_pos, src_lane, BUCKET_SIZE);
+  V* bucket_value_ptr = bucket_values_ptr + key_pos * dim;
+  const V* param_value_ptr = values + kv_idx * dim;
+  V* evicted_value_ptr = evicted_values + evict_idx * dim;
+  for (int i = 0; i < dim; i += 4) {
+    if (occupy_result == OccupyResult::REFUSED) {
+      ((float4*)(evicted_value_ptr + i))[0] = ((float4*)(param_value_ptr + i))[0];
     } else {
-      start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
-      occupy_result = find_and_lock_when_full<K, V, S, TILE_SIZE>(
-          g, bucket, insert_key, insert_score, evicted_key, start_idx,
-          key_pos, src_lane, BUCKET_SIZE);
+      if (occupy_result == OccupyResult::EVICT) {
+        ((float4*)(evicted_value_ptr + i))[0] = ((float4*)(bucket_value_ptr + i))[0];
+      }
+      ((float4*)(bucket_value_ptr + i))[0] = ((float4*)(param_value_ptr + i))[0];
     }
-    occupy_result = g.shfl(occupy_result, src_lane);
-  } while (occupy_result == OccupyResult::CONTINUE);
-
-  if (occupy_result == OccupyResult::REFUSED) {
-    copy_vector<V, TILE_SIZE>(g, insert_value, evicted_values + kv_idx * dim,
-                              dim);
-    continue;
   }
-
-  if ((occupy_result == OccupyResult::OCCUPIED_EMPTY ||
-        occupy_result == OccupyResult::OCCUPIED_RECLAIMED) &&
-      g.thread_rank() == src_lane) {
-    atomicAdd(&(buckets_size[bkt_idx]), 1);
-  }
-
-  if (occupy_result == OccupyResult::EVICT) {
-    if (g.thread_rank() == src_lane) {
-      evicted_keys[kv_idx] = evicted_key;
-    }
-    if (scores != nullptr) {
-      evicted_scores[kv_idx] = scores[kv_idx];
-    }
-    copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim,
-                              evicted_values + kv_idx * dim, dim);
-  }
-
-  copy_vector<V, TILE_SIZE>(g, insert_value, bucket->vectors + key_pos * dim,
-                            dim);
-  if (g.thread_rank() == src_lane) {
-    update_score(bucket, key_pos, scores, kv_idx);
-    bucket->digests(key_pos)[0] = get_digest<K>(insert_key);
-    (bucket->keys(key_pos))
-        ->store(insert_key, cuda::std::memory_order_relaxed);
-  }
+  __threadfence();
+  auto key_address = BKT::keys(bucket_keys_ptr, key_pos);
+  key_address->store(key, cuda::std::memory_order_release);
 }
+
+// template <
+// typename K = uint64_t,
+// typename V = float,
+// typename S = uint64_t,
+// typename VecV = float4,
+// typename D = uint8_t,
+// typename VecD = uint4,
+// uint32_t BUCKET_SIZE = 128,
+// uint32_t BLOCK_SIZE = 64,
+// uint32_t GROUP_SIZE = 8,
+// uint32_t BUF_V = 64>
+// __global__ void upsert_and_evict_kernel_unique_v3(
+//   Bucket<K, V, S>* buckets, int32_t* buckets_size, const uint64_t buckets_num, 
+//   const uint32_t dim, const K* __restrict keys, const V* __restrict values, 
+//   const S* __restrict scores, K* __restrict evicted_keys, V* __restrict evicted_values,
+//   S* __restrict evicted_scores, uint32_t n, size_t* evict_number) {
+
+//   uint32_t kv_idx = blockIdx.x * blockDim.x + threadIdx.x;
+//   if (kv_idx >= n) return;
+//   int key_pos = -1;
+//   const K insert_key = keys[kv_idx];
+//   if (IS_RESERVED_KEY(insert_key)) return;
+
+//   const S insert_score =
+//       scores != nullptr ? scores[kv_idx] : static_cast<S>(MAX_SCORE);
+//   const V* insert_value = values + kv_idx * dim;
+
+//   const K hashed_key = Murmur3HashDevice(insert_key);
+//   const size_t global_idx = hashed_key % (buckets_num * BUCKET_SIZE);
+//   size_t bkt_idx = global_idx / BUCKET_SIZE;
+//   uint32_t start_idx = global_idx % BUCKET_SIZE;
+//   Bucket<K, V, S>* bucket = buckets + bkt_idx;
+  
+//   OccupyResult occupy_result{OccupyResult::INITIAL};
+//   const int bucket_size = buckets_size[bkt_idx];
+
+//   AtomicKey<K>* current_key;
+//   AtomicScore<S>* current_score;
+//   K local_min_score_key = static_cast<K>(EMPTY_KEY);
+//   S local_min_score_val = MAX_SCORE;
+//   S temp_min_score_val = MAX_SCORE;
+//   int local_min_score_pos = -1;
+
+//   unsigned vote = 0;
+//   bool result = false;
+//   K evicted_key;
+
+//   for (uint32_t tile_offset = 0; tile_offset < BUCKET_SIZE;
+//        tile_offset += 1) {
+//     key_pos = (start_idx + tile_offset) % BUCKET_SIZE;
+//     current_key = bucket->keys(key_pos);
+
+//     K expected_key = insert_key;
+//     result = current_key->compare_exchange_strong(
+//         expected_key, static_cast<K>(LOCKED_KEY),
+//         cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
+//     if (result) {
+//       occupy_result = OccupyResult::DUPLICATE;
+//       break;
+//     } else if (expected_key == static_cast<K>(EMPTY_KEY)) {
+//       K expected_key = static_cast<K>(EMPTY_KEY);
+//       result = current_key->compare_exchange_strong(
+//           expected_key, static_cast<K>(LOCKED_KEY),
+//           cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
+//       if (result) {
+//         occupy_result = OccupyResult::OCCUPIED_EMPTY;
+//         break;
+//       }
+//     }
+//   }
+//   while (occupy_result == OccupyResult::INITIAL) {
+//     for (uint32_t tile_offset = 0; tile_offset < BUCKET_SIZE;
+//         tile_offset += 1) {
+//       key_pos = (start_idx + tile_offset) % BUCKET_SIZE;
+//       current_score = bucket->scores(key_pos);
+
+//       // Step 4: record min score location.
+//       temp_min_score_val = current_score->load(cuda::std::memory_order_relaxed);
+//       if (temp_min_score_val < local_min_score_val) {
+//         K expected_key =
+//             bucket->keys(key_pos)->load(cuda::std::memory_order_relaxed);
+//         if (expected_key != static_cast<K>(LOCKED_KEY) &&
+//             expected_key != static_cast<K>(EMPTY_KEY)) {
+//           local_min_score_key = expected_key;
+//           local_min_score_val = temp_min_score_val;
+//           local_min_score_pos = key_pos;
+//         }
+//       }
+//     }
+//     // Step 5: insert by evicting some one.
+//     if (insert_score < local_min_score_val) {
+//       occupy_result = OccupyResult::REFUSED;
+//       break;
+//     }
+//     result = false;
+//     // TBD: Here can be compare_exchange_weak. Do benchmark.
+//     current_key = bucket->keys(local_min_score_pos);
+//     current_score = bucket->scores(local_min_score_pos);
+//     evicted_key = local_min_score_key;
+//     result = current_key->compare_exchange_strong(
+//         local_min_score_key, static_cast<K>(LOCKED_KEY),
+//         cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+
+//     // Need to recover when fail.
+//     if (result && (current_score->load(cuda::std::memory_order_relaxed) >
+//                   local_min_score_val)) {
+//       current_key->store(local_min_score_key,
+//                         cuda::std::memory_order_relaxed);
+//       result = false;
+//     }
+//     if (result) {
+//       // Not every `evicted_key` is correct expect the `src_lane` thread.
+//       key_pos = local_min_score_pos;
+//       occupy_result =  (evicted_key == static_cast<K>(RECLAIM_KEY))
+//                 ? OccupyResult::OCCUPIED_RECLAIMED
+//                 : OccupyResult::EVICT;
+//       break;
+//     }
+//   }
+
+//   // do {
+//   //   if (bucket_size < BUCKET_SIZE) {
+//   //     occupy_result = find_and_lock_when_vacant<K, V, S, TILE_SIZE>(
+//   //         g, bucket, insert_key, insert_score, evicted_key, start_idx,
+//   //         key_pos, src_lane, BUCKET_SIZE);
+//   //   } else {
+//   //     start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
+//   //     occupy_result = find_and_lock_when_full<K, V, S, TILE_SIZE>(
+//   //         g, bucket, insert_key, insert_score, evicted_key, start_idx,
+//   //         key_pos, src_lane, BUCKET_SIZE);
+//   //   }
+//   //   occupy_result = g.shfl(occupy_result, src_lane);
+//   // } while (occupy_result == OccupyResult::CONTINUE);
+
+//   if (occupy_result == OccupyResult::REFUSED) {
+//     copy_vector<V, TILE_SIZE>(g, insert_value, evicted_values + kv_idx * dim,
+//                               dim);
+//     return;
+//   }
+
+//   if ((occupy_result == OccupyResult::OCCUPIED_EMPTY ||
+//         occupy_result == OccupyResult::OCCUPIED_RECLAIMED) &&
+//       g.thread_rank() == src_lane) {
+//     atomicAdd(&(buckets_size[bkt_idx]), 1);
+//   }
+
+//   if (occupy_result == OccupyResult::EVICT) {
+//     if (g.thread_rank() == src_lane) {
+//       evicted_keys[kv_idx] = evicted_key;
+//     }
+//     if (scores != nullptr) {
+//       evicted_scores[kv_idx] = scores[kv_idx];
+//     }
+//     copy_vector<V, TILE_SIZE>(g, bucket->vectors + key_pos * dim,
+//                               evicted_values + kv_idx * dim, dim);
+//   }
+
+//   copy_vector<V, TILE_SIZE>(g, insert_value, bucket->vectors + key_pos * dim,
+//                             dim);
+//   if (g.thread_rank() == src_lane) {
+//     update_score(bucket, key_pos, scores, kv_idx);
+//     bucket->digests(key_pos)[0] = get_digest<K>(insert_key);
+//     (bucket->keys(key_pos))
+//         ->store(insert_key, cuda::std::memory_order_relaxed);
+//   }
+// }
 
 template <
 typename K = uint64_t,
@@ -617,14 +782,12 @@ __global__ void upsert_and_evict_kernel_unique_v2(
         possible_pos = pos_cur + i * 4 + index;
         auto current_key = BKT::keys(bucket_keys_ptr, possible_pos);
         K expected_key = key;
-        // result = current_key->compare_exchange_strong(
-        //     expected_key, static_cast<K>(LOCKED_KEY),
-        //     cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+        // __threadfence();
         result = current_key->compare_exchange_strong(
             expected_key, static_cast<K>(LOCKED_KEY),
-            cuda::std::memory_order_seq_cst, cuda::std::memory_order_seq_cst);
+            cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
+        // __threadfence();
       } while (!result);
-      __threadfence();
       if (result) {
         key_pos = possible_pos;
         S* dst_score = BKT::scores(bucket_keys_ptr, BUCKET_SIZE, key_pos);
@@ -649,14 +812,12 @@ __global__ void upsert_and_evict_kernel_unique_v2(
         if (offset == 0 && possible_pos < key_pos) continue;
         auto current_key = BKT::keys(bucket_keys_ptr, possible_pos);
         K expected_key = static_cast<K>(EMPTY_KEY);
-        // result = current_key->compare_exchange_strong(
-        //     expected_key, static_cast<K>(LOCKED_KEY),
-        //     cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+        // __threadfence();
         result = current_key->compare_exchange_strong(
             expected_key, static_cast<K>(LOCKED_KEY),
-            cuda::std::memory_order_seq_cst, cuda::std::memory_order_seq_cst);
+            cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
+        // __threadfence();
       } while (!result);
-      __threadfence();
       if (result) {
         key_pos = possible_pos;
         S* dst_score = BKT::scores(bucket_keys_ptr, BUCKET_SIZE, key_pos);
@@ -692,28 +853,25 @@ __global__ void upsert_and_evict_kernel_unique_v2(
       break;
     }
     auto min_score_key = BKT::keys(bucket_keys_ptr, min_pos);
-    auto expected_key = min_score_key->load(cuda::std::memory_order_seq_cst);
-    __threadfence();
+    // __threadfence();
+    auto expected_key = min_score_key->load(cuda::std::memory_order_acquire);
+    // __threadfence();
     if (expected_key != static_cast<K>(LOCKED_KEY) &&
       expected_key != static_cast<K>(EMPTY_KEY)) {
       S* min_score_ptr = BKT::scores(bucket_keys_ptr, BUCKET_SIZE, min_pos);
-      // bool result = min_score_key->compare_exchange_strong(
-      //   expected_key, static_cast<K>(LOCKED_KEY),
-      //   cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+      // __threadfence();
       bool result = min_score_key->compare_exchange_strong(
         expected_key, static_cast<K>(LOCKED_KEY),
-        cuda::std::memory_order_seq_cst, cuda::std::memory_order_seq_cst);
-      __threadfence();
+        cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
+      // __threadfence();
       if (result) {
         auto verify_score_ptr = reinterpret_cast<AtomicScore<S>*>(min_score_ptr);
-        auto verify_score = verify_score_ptr->load(cuda::std::memory_order_seq_cst);
-        // if ((*min_score_ptr) > min_score) {
+        auto verify_score = verify_score_ptr->load(cuda::std::memory_order_acquire);
         if (verify_score > min_score) {
+          // __threadfence();
           min_score_key->store(expected_key,
-                      cuda::std::memory_order_seq_cst);
-          // min_score_key->store(expected_key,
-          //             cuda::std::memory_order_relaxed);
-          __threadfence();
+                      cuda::std::memory_order_release);
+          // __threadfence();
         } else {
           key_pos = min_pos;
           *min_score_ptr = score;
@@ -746,11 +904,9 @@ __global__ void upsert_and_evict_kernel_unique_v2(
       ((float4*)(bucket_values_ptr + i))[0] = ((float4*)(param_values_ptr + i))[0];
     }
   }
-  __threadfence();
+  // __threadfence();
   auto key_address = BKT::keys(bucket_keys_ptr, key_pos);
-  key_address->store(key, cuda::std::memory_order_seq_cst);
-  // key_address->store(key, cuda::std::memory_order_relaxed);
-  // key_address->store(key, cuda::std::memory_order_seq_cst);
+  key_address->store(key, cuda::std::memory_order_release);
 }
 
 // GROUP_SIZE = 8, 16, 32. It is related to load factor and value size.
@@ -2519,6 +2675,15 @@ struct SelectUpsertAndEvictKernelWithIO {
       K* __restrict evicted_keys, V* __restrict evicted_values,
       S* __restrict evicted_scores) {
     if (false) {
+      const unsigned int tile_size = 1;
+      const size_t N = n * tile_size;
+      const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
+      upsert_and_evict_kernel_with_io_core<K, V, S, tile_size>
+          <<<grid_size, block_size, 0, stream>>>(
+              table, bucket_max_size, buckets_num, dim, keys, values, scores,
+              evicted_keys, evicted_values, evicted_scores, N);
+    }
+    else if (false) {
       const unsigned int tile_size = 32;
       const size_t N = n;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);

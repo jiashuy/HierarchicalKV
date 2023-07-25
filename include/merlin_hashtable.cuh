@@ -482,8 +482,8 @@ class HashTable {
       constexpr uint32_t BLOCK_SIZE = 128;
       uint32_t grid_size = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
       // upsert_and_evict_kernel_unique_v1
-      upsert_and_evict_kernel_unique_v1
-              <key_type, value_type, score_type, float4, uint8_t, uint4, 128, 128, 32, 4>
+      upsert_and_evict_kernel_unique_v2
+              <key_type, value_type, score_type, float4, uint8_t, uint4, 128, 128, 32, 32>
       // upsert_and_evict_kernel_unique<key_type, value_type, score_type>
           <<<grid_size, BLOCK_SIZE, 0, stream>>>(
             table_->buckets, table_->buckets_size, table_->buckets_num,
