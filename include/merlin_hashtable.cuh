@@ -431,7 +431,8 @@ class HashTable {
                              key_type* evicted_keys,      // (n)
                              value_type* evicted_values,  // (n, DIM)
                              score_type* evicted_scores,  // (n)
-                             cudaStream_t stream = 0) {
+                             cudaStream_t stream = 0,
+                             float load_factor_ = 1.0) {
     if (n == 0) {
       return 0;
     }
@@ -453,7 +454,11 @@ class HashTable {
     static thread_local int step_counter = 0;
     static thread_local float load_factor = 0.0;
 
-    if (((step_counter++) % kernel_select_interval_) == 0) {
+    bool benchmark = true;
+    if (benchmark) {
+      load_factor = load_factor_;
+    }
+    else if (((step_counter++) % kernel_select_interval_) == 0) {
       load_factor = fast_load_factor(0, stream, false);
     }
 
@@ -473,28 +478,32 @@ class HashTable {
     CUDA_CHECK(cudaMemsetAsync(dn_evicted, 0, sizeof(size_type), stream));
     size_type block_size = options_.block_size;
     size_type grid_size = SAFE_GET_GRID_SIZE(n, block_size);
+    if (true && options_.max_bucket_size == 128) {
+      constexpr uint32_t BLOCK_SIZE = 128;
+      uint32_t grid_size = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+      // upsert_and_evict_kernel_unique_v1
+      upsert_and_evict_kernel_unique_v1
+              <key_type, value_type, score_type, float4, uint8_t, uint4, 128, 128, 32, 4>
+      // upsert_and_evict_kernel_unique<key_type, value_type, score_type>
+          <<<grid_size, BLOCK_SIZE, 0, stream>>>(
+            table_->buckets, table_->buckets_size, table_->buckets_num,
+             options_.dim, keys, values, scores, 
+             evicted_keys, evicted_values, evicted_scores, n, dn_evicted);
+    } else {
       CUDA_CHECK(cudaMemsetAsync(d_masks, 0, n * sizeof(bool), stream));
       CUDA_CHECK(cudaMemsetAsync(evicted_keys, static_cast<int>(EMPTY_KEY),
                                 n * sizeof(K), stream));
-    if (false && options_.max_bucket_size == 128) {
-      // constexpr uint32_t BLOCK_SIZE = 128;
-      // upsert_and_evict_kernel_with_io_filter_unique<key_type, value_type, score_type>
-      //   <<<(n + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
-      //     table_->buckets, table_->buckets_size, options_.max_bucket_size, 
-      //     table_->buckets_num, options_.dim, keys, values,
-      //     scores, evicted_keys, evicted_values, evicted_scores, d_masks, n);
-    } else {
       Selector::execute_kernel(
           load_factor, options_.block_size, options_.max_bucket_size,
           table_->buckets_num, options_.dim, stream, n, d_table_, keys, values,
           scores, evicted_keys, evicted_values, evicted_scores);
+      keys_not_empty<K>
+          <<<grid_size, block_size, 0, stream>>>(evicted_keys, d_masks, n);
+      gpu_boolean_mask<K, V, S, int64_t, TILE_SIZE>(
+          grid_size, block_size, d_masks, n, dn_evicted, d_offsets, evicted_keys,
+          evicted_values, evicted_scores, dim(), stream);
     }
-    keys_not_empty<K>
-        <<<grid_size, block_size, 0, stream>>>(evicted_keys, d_masks, n);
     size_type n_evicted = 0;
-    gpu_boolean_mask<K, V, S, int64_t, TILE_SIZE>(
-        grid_size, block_size, d_masks, n, dn_evicted, d_offsets, evicted_keys,
-        evicted_values, evicted_scores, dim(), stream);
     CUDA_CHECK(cudaMemcpyAsync(&n_evicted, dn_evicted, sizeof(size_type),
                                cudaMemcpyDeviceToHost, stream));
     CUDA_CHECK(cudaStreamSynchronize(stream));

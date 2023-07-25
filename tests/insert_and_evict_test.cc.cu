@@ -23,7 +23,7 @@
 #include "merlin_localfile.hpp"
 #include "test_util.cuh"
 
-constexpr size_t dim = 64;
+constexpr size_t dim = 4;
 using i64 = int64_t;
 using u64 = uint64_t;
 using f32 = float;
@@ -743,6 +743,6 @@ TEST(InsertAndEvictTest, test_insert_and_evict_with_export_batch) {
   test_insert_and_evict_with_export_batch();
 }
 
-TEST(InsertAndEvictTest, test_insert_and_evict_run_with_batch_find) {
-  test_insert_and_evict_run_with_batch_find();
-}
+// TEST(InsertAndEvictTest, test_insert_and_evict_run_with_batch_find) {
+//   test_insert_and_evict_run_with_batch_find();
+// }

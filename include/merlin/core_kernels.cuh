@@ -87,6 +87,8 @@ __global__ void create_atomic_keys(Bucket<K, V, S>* __restrict buckets,
   uint16_t empty_digest_16 = static_cast<uint16_t>(hashed_key >> 32);
   if (start + tid < end) {
     for (size_t i = 0; i < bucket_max_size; i++)
+      buckets[start + tid].priority_queue[i] = static_cast<uint8_t>(0xff);
+    for (size_t i = 0; i < bucket_max_size; i++)
       buckets[start + tid].digests_16[i] = empty_digest_16;
     for (size_t i = 0; i < bucket_max_size; i++)
       buckets[start + tid].digests(i)[0] = empty_digest<K>();
@@ -111,6 +113,10 @@ __global__ void create_atomic_scores(Bucket<K, V, S>* __restrict buckets,
     new (&(buckets[start + tid].min_score))
         AtomicScore<S>{static_cast<S>(EMPTY_SCORE)};
     new (&(buckets[start + tid].min_pos)) AtomicPos<int>{1};
+
+    buckets[start + tid].queue_head = 0;
+    buckets[start + tid].queue_size = 0;
+    buckets[start + tid].locked = 0;
   }
 }
 
@@ -178,11 +184,13 @@ void initialize_buckets(Table<K, V, S>** table, const size_t start,
   // Align the digests according to the cache line size.
   uint32_t offset_for_digest = bucket_max_size < 128 ? 128 : bucket_max_size;
   uint32_t reserve_digest =
-      offset_for_digest * (sizeof(uint8_t) + sizeof(uint16_t));
+      offset_for_digest * (sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint8_t));
   bucket_memory_size += reserve_digest;
   for (int i = start; i < end; i++) {
     CUDA_CHECK(
-        cudaMalloc(&((*table)->buckets[i].digests_16), bucket_memory_size));
+        cudaMalloc(&((*table)->buckets[i].priority_queue), bucket_memory_size));
+    (*table)->buckets[i].digests_16 = 
+        reinterpret_cast<uint16_t*>((*table)->buckets[i].priority_queue + offset_for_digest);
     (*table)->buckets[i].digests_ = 
         reinterpret_cast<uint8_t*>((*table)->buckets[i].digests_16 + offset_for_digest);
     (*table)->buckets[i].keys_ =
@@ -326,7 +334,7 @@ void double_capacity(Table<K, V, S>** table) {
 template <class K, class V, class S>
 void destroy_table(Table<K, V, S>** table) {
   for (int i = 0; i < (*table)->buckets_num; i++) {
-    CUDA_CHECK(cudaFree((*table)->buckets[i].digests_16));
+    CUDA_CHECK(cudaFree((*table)->buckets[i].priority_queue));
   }
 
   for (int i = 0; i < (*table)->num_of_memory_slices; i++) {

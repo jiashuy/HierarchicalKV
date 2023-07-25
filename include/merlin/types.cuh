@@ -56,13 +56,18 @@ using AtomicPos = cuda::atomic<T, cuda::thread_scope_device>;
 template <class K, class V, class S>
 struct Bucket {
   using D = uint8_t;
+  using Q = uint8_t;
   AtomicKey<K>* keys_;
   /// TODO: compute the pointer of scores and digests using bucket_max_size
   AtomicScore<S>* scores_;
   /// @brief not visible to users
   D* digests_;
   uint16_t* digests_16;
+  Q* priority_queue;
   V* vectors;  // Pinned memory or HBM
+  AtomicPos<int> locked;
+  uint16_t queue_head;
+  uint16_t queue_size;
 
   /* For upsert_kernel without user specified scores
      recording the current score, the cur_score will
@@ -103,17 +108,21 @@ struct Bucket {
     return reinterpret_cast<K*>(keys_);
   }
 
-  __forceinline__ __device__ V* values() {
+  __forceinline__ __device__ V*& values() {
     return vectors;
   }
 
-  static __forceinline__ __device__ D* digests(K* keys, uint32_t bucket_capacity) {
-    bucket_capacity = bucket_capacity < 128 ? 128 : bucket_capacity;
-    return reinterpret_cast<D*>(keys) - bucket_capacity;
+  static __forceinline__ __device__ AtomicKey<K>* keys(K* keys, uint32_t offset) {
+    return reinterpret_cast<AtomicKey<K>*>(keys) + offset;
   }
 
-  static __forceinline__ __device__ S* scores(K* keys, uint32_t bucket_capacity) {
-    return reinterpret_cast<S*>(keys + bucket_capacity);
+  static __forceinline__ __device__ D* digests(K* keys, uint32_t bucket_capacity, uint32_t offset) {
+    bucket_capacity = bucket_capacity < 128 ? 128 : bucket_capacity;
+    return reinterpret_cast<D*>(keys) - bucket_capacity + offset;
+  }
+
+  static __forceinline__ __device__ S* scores(K* keys, uint32_t bucket_capacity, uint32_t offset) {
+    return reinterpret_cast<S*>(keys + bucket_capacity) + offset;
   }
 };
 

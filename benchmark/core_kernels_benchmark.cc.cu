@@ -35,7 +35,7 @@
 #include "explore_kernels/probing_tests.cuh"
 #include "explore_kernels/copying_tests.cuh"
 #include "explore_kernels/lookup_v1.cuh"
-#include "explore_kernels/filter_based_lookup.cuh"
+// #include "explore_kernels/filter_based_lookup.cuh"
 #include "explore_kernels/pipeline_general.cuh"
 
 
@@ -59,8 +59,8 @@ A100 40G:　 1555  GB/s
 3090    :   936.2 GB/s
 */
 constexpr float PeakBW = 2039.0f;
-constexpr uint32_t REPEAT = 1;
-constexpr uint32_t WARMUP = 5;
+constexpr uint32_t REPEAT = 2;//1;//1;
+constexpr uint32_t WARMUP = 5;//0;//0;
 constexpr double EPSILON = 1e-3;
 constexpr int PRECISION = 3;
 constexpr TimeUnit tu = TimeUnit::MilliSecond;
@@ -682,47 +682,47 @@ float test_one_api(const API_Select api, TestDescriptor& td,
       break;
     }
     case API_Select::filter_based_lookup: {
-      timer.start();
-      ////////////////////////////////////////////////////////////////////////////////////
-      if (options.dim == 4) 
-        lookup_kernel_with_io_v4_1<K, V, S, 1>
-            <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
-                table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
-                d_keys, d_vectors, d_scores, d_found, key_num_per_op);
-      else if (options.dim == 64)
-        lookup_kernel_with_io_v4_1<K, V, S, 16>
-            <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
-                table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
-                d_keys, d_vectors, d_scores, d_found, key_num_per_op);
-      else if (options.dim == 128)
-        lookup_kernel_with_io_v4_1<K, V, S, 16>
-            <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
-                table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
-                d_keys, d_vectors, d_scores, d_found, key_num_per_op);
-      timer.end();
-      CUDA_CHECK(cudaStreamSynchronize(stream));
+      // timer.start();
+      // ////////////////////////////////////////////////////////////////////////////////////
+      // if (options.dim == 4) 
+      //   lookup_kernel_with_io_v4_1<K, V, S, 1>
+      //       <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //           table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //           d_keys, d_vectors, d_scores, d_found, key_num_per_op);
+      // else if (options.dim == 64)
+      //   lookup_kernel_with_io_v4_1<K, V, S, 16>
+      //       <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //           table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //           d_keys, d_vectors, d_scores, d_found, key_num_per_op);
+      // else if (options.dim == 128)
+      //   lookup_kernel_with_io_v4_1<K, V, S, 16>
+      //       <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //           table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //           d_keys, d_vectors, d_scores, d_found, key_num_per_op);
+      // timer.end();
+      // CUDA_CHECK(cudaStreamSynchronize(stream));
       break;
     }
     case API_Select::filter_based_lookup_prefetch: {
       timer.start();
-      ////////////////////////////////////////////////////////////////////////////////////
-      if (options.dim == 4) 
-        lookup_kernel_with_io_v4_2<K, V, S, 1, 4>
-            <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
-                table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
-                d_keys, d_vectors, d_scores, d_found, key_num_per_op);
-      else if (options.dim == 64)
-        lookup_kernel_with_io_v4_2<K, V, S, 16, 64>
-            <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
-                table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
-                d_keys, d_vectors, d_scores, d_found, key_num_per_op);
-      else if (options.dim == 128)
-        lookup_kernel_with_io_v4_2<K, V, S, 32, 128>
-            <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
-                table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
-                d_keys, d_vectors, d_scores, d_found, key_num_per_op);
-      timer.end();
-      CUDA_CHECK(cudaStreamSynchronize(stream));
+      // ////////////////////////////////////////////////////////////////////////////////////
+      // if (options.dim == 4) 
+      //   lookup_kernel_with_io_v4_2<K, V, S, 1, 4>
+      //       <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //           table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //           d_keys, d_vectors, d_scores, d_found, key_num_per_op);
+      // else if (options.dim == 64)
+      //   lookup_kernel_with_io_v4_2<K, V, S, 16, 64>
+      //       <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //           table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //           d_keys, d_vectors, d_scores, d_found, key_num_per_op);
+      // else if (options.dim == 128)
+      //   lookup_kernel_with_io_v4_2<K, V, S, 32, 128>
+      //       <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //           table_core->buckets, table_core->buckets_num, static_cast<int>(options.dim), 
+      //           d_keys, d_vectors, d_scores, d_found, key_num_per_op);
+      // timer.end();
+      // CUDA_CHECK(cudaStreamSynchronize(stream));
       break;
     }
     case API_Select::pipeline_lookup: {
@@ -863,20 +863,20 @@ float test_one_api(const API_Select api, TestDescriptor& td,
       break;
     }
     case API_Select::filter_lookup_prefetch_aggressively: {
-      timer.start();
-      if (options.dim == 4) {
-        lookup_kernel_with_io_filter<K, V, S, float4, 1, 64>
-            <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
-              table_core->buckets, (int)(options.max_bucket_size), table_core->buckets_num, static_cast<int>(options.dim/4), 
-              d_keys, reinterpret_cast<float4*>(d_vectors), d_scores, d_found, key_num_per_op);
-      } else if (options.dim == 128) {
-        lookup_kernel_with_io_filter<K, V, S, float4, 32, 64>
-             <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
-              table_core->buckets, (int)(options.max_bucket_size), table_core->buckets_num, static_cast<int>(options.dim/4), 
-              d_keys, reinterpret_cast<float4*>(d_vectors), d_scores, d_found, key_num_per_op);
-      }
-      timer.end();
-      CUDA_CHECK(cudaStreamSynchronize(stream));
+      // timer.start();
+      // if (options.dim == 4) {
+      //   lookup_kernel_with_io_filter<K, V, S, float4, 1, 64>
+      //       <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //         table_core->buckets, (int)(options.max_bucket_size), table_core->buckets_num, static_cast<int>(options.dim/4), 
+      //         d_keys, reinterpret_cast<float4*>(d_vectors), d_scores, d_found, key_num_per_op);
+      // } else if (options.dim == 128) {
+      //   lookup_kernel_with_io_filter<K, V, S, float4, 32, 64>
+      //        <<<(key_num_per_op + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+      //         table_core->buckets, (int)(options.max_bucket_size), table_core->buckets_num, static_cast<int>(options.dim/4), 
+      //         d_keys, reinterpret_cast<float4*>(d_vectors), d_scores, d_found, key_num_per_op);
+      // }
+      // timer.end();
+      // CUDA_CHECK(cudaStreamSynchronize(stream));
       break;
     }
     case API_Select::find: {
@@ -948,7 +948,7 @@ float test_one_api(const API_Select api, TestDescriptor& td,
       timer.start();
       evicted_number = table->insert_and_evict(key_num_per_op, d_keys, d_vectors, d_scores,
                               d_evict_keys, d_vect_contrast, d_evict_scores,
-                              stream);
+                              stream, td.load_factor);
       timer.end();
       CUDA_CHECK(cudaStreamSynchronize(stream));
       break;
@@ -1199,13 +1199,13 @@ void test_bucket_size() {
 void test_by_discription(TestDescriptor& td, API_Select api, bool check = false) {
   // Check correctness
   td.load_factor = 1.0f;
-  test_one_api(api, td, true, false, true);
+  // test_one_api(api, td, true, false, true);
   // Warpup
   for (int i = 0; i < WARMUP; i++) {
     test_one_api(api, td);
   }
   bool sample_hit_rate = api == API_Select::insert_and_evict ? true : false;
-  for (float lf = 0.02; lf < 1.0f; lf += 0.03) {
+  for (float lf = 0.02; lf <= 1.0f; lf += 0.03) {
     td.load_factor = lf;
     std::vector<float> elapsed_time(REPEAT, 0.0f);
     for (int i = 0; i < REPEAT; i++) {
@@ -1720,17 +1720,17 @@ void test_lookup_filter_prefetch_aggressively() {
 
 void test_insert_and_evict() {
   TestDescriptor td;
-  td.capacity = 64 * 1024 * 1024UL;
+  td.capacity = 16 * 1024 * 1024; //64 * 1024 * 1024UL;
   td.key_num_per_op = 1024 * 1024UL;
   td.load_factor = 1.0f;
-  td.hit_rate = 1.0f;
+  td.hit_rate = 0.6f;
   td.hit_mode = Hit_Mode::last_insert;
 
   two_lines();
   std::cout << "Test insert_and_evict: 1 thread probing, group reduction, copying\n";
   two_lines();
 
-  td.dim = 4;
+  td.dim = 32;
   two_lines();
   std::cout << "Capacity = 64 * 1024 * 1024 \t"
             << "Batch = 1024 * 1024 \t"
@@ -1739,17 +1739,18 @@ void test_insert_and_evict() {
   two_lines();
   test_by_discription(td, API_Select::insert_and_evict);
 
-  td.dim = 128;
-  two_lines();
-  std::cout << "Capacity = 64 * 1024 * 1024 \t"
-            << "Batch = 1024 * 1024 \t"
-            << "Key = 64 bits \t"
-            << "Value = 512 B\n";
-  two_lines();
-  test_by_discription(td, API_Select::insert_and_evict);
+  // td.dim = 64;
+  // two_lines();
+  // std::cout << "Capacity = 64 * 1024 * 1024 \t"
+  //           << "Batch = 1024 * 1024 \t"
+  //           << "Key = 64 bits \t"
+  //           << "Value = 512 B\n";
+  // two_lines();
+  // test_by_discription(td, API_Select::insert_and_evict);
 }
 
 int main(int argc, char* argv[]) {
+  init_cuda(1);
   try {
     {
       // test_bucket_size();
