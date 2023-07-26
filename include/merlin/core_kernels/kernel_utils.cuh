@@ -32,6 +32,12 @@ namespace cg = cooperative_groups;
 namespace nv {
 namespace merlin {
 
+using byte16 = float4;
+using byte8 = float2;
+using byte4 = float;
+using byte2 = __half;
+using byte = __nv_fp8_storage_t;
+
 // if i % 2 == 0, select buffer 0, else buffer 1
 __forceinline__ __device__ int same_buf(int i) { return (i & 0x01) ^ 0; }
 // if i % 2 == 0, select buffer 1, else buffer 0
