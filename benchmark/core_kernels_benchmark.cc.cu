@@ -1730,7 +1730,7 @@ void test_insert_and_evict() {
   std::cout << "Test insert_and_evict: 1 thread probing, group reduction, copying\n";
   two_lines();
 
-  td.dim = 32;
+  td.dim = 4;
   two_lines();
   std::cout << "Capacity = 64 * 1024 * 1024 \t"
             << "Batch = 1024 * 1024 \t"

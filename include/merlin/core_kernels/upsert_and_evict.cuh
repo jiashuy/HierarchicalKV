@@ -406,7 +406,7 @@ __global__ void upsert_and_evict_kernel_unique_v4(
   OccupyResult occupy_result{OccupyResult::INITIAL};
   if (kv_idx < n) {
     key = keys[kv_idx];
-    score = scores != nullptr ? scores[kv_idx] : device_nano<S>();
+    score = scores != nullptr ? scores[kv_idx] : static_cast<S>(MAX_SCORE);
     if (!IS_RESERVED_KEY(key)) {
       const K hashed_key = Murmur3HashDevice(key);
       uint64_t global_idx = static_cast<uint64_t>(
@@ -429,32 +429,28 @@ __global__ void upsert_and_evict_kernel_unique_v4(
     bool result = false;
     auto current_key = BKT::keys(bucket_keys_ptr, pos_cur);
     K expected_key = key;
-    __threadfence();
     result = current_key->compare_exchange_strong(
         expected_key, static_cast<K>(LOCKED_KEY),
         cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
-    __threadfence();
     if (result) {
       occupy_result = OccupyResult::DUPLICATE;
       key_pos = pos_cur;
       S* dst_score = BKT::scores(bucket_keys_ptr, BUCKET_SIZE, key_pos);
       D* dst_digest = BKT::digests(bucket_keys_ptr, BUCKET_SIZE, key_pos);
       *dst_digest = get_digest<K>(key);
-      *dst_score = score;
+      *dst_score = scores == nullptr ? device_nano<S>() : score;
       break;
     } else if (expected_key == static_cast<K>(EMPTY_KEY)) {
-      __threadfence();
       result = current_key->compare_exchange_strong(
           expected_key, static_cast<K>(LOCKED_KEY),
           cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
-      __threadfence();
       if (result) {
         occupy_result = OccupyResult::OCCUPIED_EMPTY;
         key_pos = pos_cur;
         S* dst_score = BKT::scores(bucket_keys_ptr, BUCKET_SIZE, key_pos);
         D* dst_digest = BKT::digests(bucket_keys_ptr, BUCKET_SIZE, key_pos);
         *dst_digest = get_digest<K>(key);
-        *dst_score = score;
+        *dst_score = scores == nullptr ? device_nano<S>() : score;
         atomicAdd(bucket_size_ptr, 1);
         break;
       }
@@ -488,23 +484,19 @@ __global__ void upsert_and_evict_kernel_unique_v4(
     auto expected_key = min_score_key->load(cuda::std::memory_order_acquire);
     if (expected_key != static_cast<K>(LOCKED_KEY) &&
       expected_key != static_cast<K>(EMPTY_KEY)) {
-      __threadfence();
       bool result = min_score_key->compare_exchange_strong(
         expected_key, static_cast<K>(LOCKED_KEY),
         cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
-      __threadfence();
       if (result) {
         S* min_score_ptr = BKT::scores(bucket_keys_ptr, BUCKET_SIZE, min_pos);
         auto verify_score_ptr = reinterpret_cast<AtomicScore<S>*>(min_score_ptr);
         auto verify_score = verify_score_ptr->load(cuda::std::memory_order_acquire);
         if (verify_score > min_score) {
-          __threadfence();
           min_score_key->store(expected_key,
                       cuda::std::memory_order_release);
-          __threadfence();
         } else {
           key_pos = min_pos;
-          *min_score_ptr = score;
+          *min_score_ptr = scores == nullptr ? device_nano<S>() : score;
           D* dst_digest = BKT::digests(bucket_keys_ptr, BUCKET_SIZE, key_pos);
           *dst_digest = get_digest<K>(key);
           if (expected_key == static_cast<K>(RECLAIM_KEY)) {
@@ -534,7 +526,6 @@ __global__ void upsert_and_evict_kernel_unique_v4(
       ((float4*)(bucket_value_ptr + i))[0] = ((float4*)(param_value_ptr + i))[0];
     }
   }
-  __threadfence();
   auto key_address = BKT::keys(bucket_keys_ptr, key_pos);
   key_address->store(key, cuda::std::memory_order_release);
 }
@@ -739,7 +730,7 @@ __global__ void upsert_and_evict_kernel_unique_v2(
   OccupyResult occupy_result{OccupyResult::INITIAL};
   if (kv_idx < n) {
     key = keys[kv_idx];
-    score = scores != nullptr ? scores[kv_idx] : device_nano<S>();
+    score = scores != nullptr ? scores[kv_idx] : static_cast<S>(MAX_SCORE);
     if (!IS_RESERVED_KEY(key)) {
       const K hashed_key = Murmur3HashDevice(key);
       D digest = digest_from_hashed<K>(hashed_key);
@@ -794,7 +785,7 @@ __global__ void upsert_and_evict_kernel_unique_v2(
         D* dst_digest = BKT::digests(bucket_keys_ptr, BUCKET_SIZE, key_pos);
         occupy_result = OccupyResult::DUPLICATE;
         dst_digest[0] = get_digest<K>(key);
-        dst_score[0] = score;
+        dst_score[0] = scores == nullptr ? device_nano<S>() : score;
         break;
       } else if (bucket_size == BUCKET_SIZE) {
         continue;
@@ -824,7 +815,7 @@ __global__ void upsert_and_evict_kernel_unique_v2(
         D* dst_digest = BKT::digests(bucket_keys_ptr, BUCKET_SIZE, key_pos);
         occupy_result = OccupyResult::OCCUPIED_EMPTY;
         dst_digest[0] = get_digest<K>(key);
-        dst_score[0] = score;
+        dst_score[0] = scores == nullptr ? device_nano<S>() : score;
         atomicAdd(bucket_size_address, 1);
         break;
       }
@@ -874,7 +865,7 @@ __global__ void upsert_and_evict_kernel_unique_v2(
           // __threadfence();
         } else {
           key_pos = min_pos;
-          *min_score_ptr = score;
+          *min_score_ptr = scores == nullptr ? device_nano<S>() : score;
           D* dst_digest = BKT::digests(bucket_keys_ptr, BUCKET_SIZE, key_pos);
           *dst_digest = get_digest<K>(key);
           if (expected_key == static_cast<K>(RECLAIM_KEY)) {
@@ -953,7 +944,7 @@ __global__ void upsert_and_evict_kernel_unique_v1(
     if (scores != nullptr) {
       __pipeline_memcpy_async(sm_param_scores + tx, scores + kv_idx, sizeof(S));
     } else {
-      sm_param_scores[tx] = device_nano<S>();
+      sm_param_scores[tx] = static_cast<S>(MAX_SCORE);
     }
     if (!IS_RESERVED_KEY(key)) {
       const K hashed_key = Murmur3HashDevice(key);
@@ -1035,14 +1026,14 @@ __global__ void upsert_and_evict_kernel_unique_v1(
           K expected_key = key_cur;
           result = current_key->compare_exchange_strong(
               expected_key, static_cast<K>(LOCKED_KEY),
-              cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+              cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
         } while (!result);
         found_vote = g.ballot(result);
         if (found_vote) {
           int32_t src_lane = __ffs(found_vote) - 1;
           possible_pos = g.shfl(possible_pos, src_lane);
           if (rank == i) {
-            S score = sm_param_scores[tx];
+            S score = scores == nullptr ? device_nano<S>() : sm_param_scores[tx];
             key_pos = possible_pos;
             S* dst_score = (S*)BKT::scores(bucket_keys_ptr, BUCKET_SIZE, key_pos);
             D* dst_digest = BKT::digests(bucket_keys_ptr, BUCKET_SIZE, key_pos);
@@ -1072,7 +1063,7 @@ __global__ void upsert_and_evict_kernel_unique_v1(
                 K expected_key = static_cast<K>(EMPTY_KEY);
                 result = current_key->compare_exchange_strong(
                     expected_key, static_cast<K>(LOCKED_KEY),
-                    cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+                    cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
               } while (!result);
             }
             found_vote = g.ballot(result);
@@ -1080,7 +1071,7 @@ __global__ void upsert_and_evict_kernel_unique_v1(
               int32_t src_lane = __ffs(found_vote) - 1;
               possible_pos = g.shfl(possible_pos, src_lane);
               if (rank == i) {
-                S score = sm_param_scores[tx];
+                S score = scores == nullptr ? device_nano<S>() : sm_param_scores[tx];
                 int* bucket_size_address = sm_buckets_size_address[tx];
                 key_pos = possible_pos;
                 S* dst_score = (S*)BKT::scores(bucket_keys_ptr, BUCKET_SIZE, key_pos);
@@ -1115,7 +1106,7 @@ __global__ void upsert_and_evict_kernel_unique_v1(
     if (i > 0) {
       occupy_result_cur = g.shfl(occupy_result, i - 1);
       uint32_t tx_cur = groupID * GROUP_SIZE + i - 1;
-      S score_cur = sm_param_scores[tx_cur];
+      S score_cur = scores == nullptr ? device_nano<S>() : sm_param_scores[tx_cur];
       auto bucket_size_address = sm_buckets_size_address[tx_cur];
       __pipeline_wait_prior(3);
       S* src = sm_bucket_scores[groupID][diff_buf(i)];
@@ -1149,17 +1140,17 @@ __global__ void upsert_and_evict_kernel_unique_v1(
           if (rank == i - 1) {
             src[min_pos_global] = static_cast<S>(MAX_SCORE); // Mark visited.
             auto min_score_key = BKT::keys(bucket_keys_ptr, min_pos_global);
-            auto expected_key = min_score_key->load(cuda::std::memory_order_relaxed);
+            auto expected_key = min_score_key->load(cuda::std::memory_order_acquire);
             if (expected_key != static_cast<K>(LOCKED_KEY) &&
               expected_key != static_cast<K>(EMPTY_KEY)) {
               S* min_score_ptr = BKT::scores(bucket_keys_ptr, BUCKET_SIZE, min_pos_global);
               bool result = min_score_key->compare_exchange_strong(
                 expected_key, static_cast<K>(LOCKED_KEY),
-                cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+                cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
               if (result) {
                 if (min_score_ptr[0] > min_score_global) {
                   min_score_key->store(expected_key,
-                              cuda::std::memory_order_relaxed);
+                              cuda::std::memory_order_release);
                 } else {
                   if (expected_key == static_cast<K>(RECLAIM_KEY)) {
                     atomicAdd(bucket_size_address, 1);
@@ -1232,7 +1223,7 @@ __global__ void upsert_and_evict_kernel_unique_v1(
           }
           if (rank == i - 2) {
             auto key_address = BKT::keys(bucket_keys_ptr, key_pos);
-            key_address->store(key, cuda::std::memory_order_relaxed);
+            key_address->store(key, cuda::std::memory_order_release);
           }
         }
         if (occupy_result_cur == OccupyResult::EVICT) {
@@ -1283,17 +1274,17 @@ __global__ void upsert_and_evict_kernel_unique_v1(
       if (rank == GROUP_SIZE - 1) {
         src[min_pos_global] = MAX_SCORE; // Mark visited.
         auto min_score_key = BKT::keys(bucket_keys_ptr, min_pos_global);
-        auto expected_key = min_score_key->load(cuda::std::memory_order_relaxed);
+        auto expected_key = min_score_key->load(cuda::std::memory_order_acquire);
         if (expected_key != static_cast<K>(LOCKED_KEY) &&
           expected_key != static_cast<K>(EMPTY_KEY)) {
           auto min_score_ptr = BKT::scores(bucket_keys_ptr, BUCKET_SIZE, min_pos_global);
           bool result = min_score_key->compare_exchange_strong(
             expected_key, static_cast<K>(LOCKED_KEY),
-            cuda::std::memory_order_relaxed, cuda::std::memory_order_relaxed);
+            cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
           if (result) {
             if (min_score_ptr[0] > min_score_global) {
               min_score_key->store(expected_key,
-                          cuda::std::memory_order_relaxed);
+                          cuda::std::memory_order_release);
             } else {
               if (expected_key == static_cast<K>(RECLAIM_KEY)) {
                 atomicAdd(bucket_size_address, 1);
@@ -1363,7 +1354,7 @@ __global__ void upsert_and_evict_kernel_unique_v1(
       }
       if (rank == GROUP_SIZE - 2) {
         auto key_address = BKT::keys(bucket_keys_ptr, key_pos);
-        key_address->store(key, cuda::std::memory_order_relaxed);
+        key_address->store(key, cuda::std::memory_order_release);
       }
       if (occupy_result_cur == OccupyResult::EVICT) {
         V* src = sm_values_buffer[groupID][same_buf(GROUP_SIZE)] + BUF_V;
@@ -1402,7 +1393,7 @@ __global__ void upsert_and_evict_kernel_unique_v1(
       }
       if (rank == GROUP_SIZE - 1) {
         auto key_address = BKT::keys(bucket_keys_ptr, key_pos);
-        key_address->store(key, cuda::std::memory_order_relaxed);
+        key_address->store(key, cuda::std::memory_order_release);
       }
       if (occupy_result_cur == OccupyResult::EVICT) {
         V* src = sm_values_buffer[groupID][same_buf(GROUP_SIZE + 1)] + BUF_V;
