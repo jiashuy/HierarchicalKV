@@ -969,14 +969,14 @@ __global__ void pipeline_upsert_and_evict_kernel_unique(
         src[min_pos_global] = MAX_SCORE;  // Mark visited.
         auto min_score_key = BUCKET::keys(bucket_keys_ptr, min_pos_global);
         auto expected_key =
-            min_score_key->load(cuda::std::memory_order_acquire);
+            min_score_key->load(cuda::std::memory_order_relaxed);
         if (expected_key != static_cast<K>(LOCKED_KEY) &&
             expected_key != static_cast<K>(EMPTY_KEY)) {
           auto min_score_ptr =
               BUCKET::scores(bucket_keys_ptr, BUCKET_SIZE, min_pos_global);
           bool result = min_score_key->compare_exchange_strong(
               expected_key, static_cast<K>(LOCKED_KEY),
-              cuda::std::memory_order_acquire, cuda::std::memory_order_acquire);
+              cuda::std::memory_order_acquire, cuda::std::memory_order_relaxed);
           if (result) {
             S* score_ptr =
                 BUCKET::scores(bucket_keys_ptr, BUCKET_SIZE, min_pos_global);
