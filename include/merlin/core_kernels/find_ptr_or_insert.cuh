@@ -54,7 +54,7 @@ __global__ void find_ptr_or_insert_kernel(
     Bucket<K, V, S>* bucket =
         get_key_position<K>(buckets, find_or_insert_key, bkt_idx, start_idx,
                             buckets_num, bucket_max_size);
-
+    
     OccupyResult occupy_result{OccupyResult::INITIAL};
     const int bucket_size = buckets_size[bkt_idx];
     do {

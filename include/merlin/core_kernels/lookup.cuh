@@ -905,6 +905,7 @@ __global__ void lookup_kernel(const Table<K, V, S>* __restrict table,
     Bucket<K, V, S>* bucket = get_key_position<K>(
         buckets, find_key, bkt_idx, start_idx, buckets_num, bucket_max_size);
 
+
     const int bucket_size = buckets_size[bkt_idx];
     if (bucket_size >= bucket_max_size) {
       start_idx = (start_idx / TILE_SIZE) * TILE_SIZE;
