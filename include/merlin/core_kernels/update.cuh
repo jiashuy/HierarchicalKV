@@ -50,7 +50,7 @@ __global__ void tlp_update_kernel_with_io(
       target_digests = digests_from_hashed<K>(hashed_key);
       uint64_t global_idx =
           static_cast<uint64_t>(hashed_key % (buckets_num * bucket_capacity));
-      key_pos = global_idx & (bucket_capacity - 1);
+      key_pos = get_start_position(global_idx, bucket_capacity);
       uint64_t bkt_idx = global_idx / bucket_capacity;
       BUCKET* bucket = buckets + bkt_idx;
       bucket_keys_ptr = reinterpret_cast<K*>(bucket->keys(0));

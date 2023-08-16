@@ -718,12 +718,13 @@ class HashTable {
    * If @p scores is `nullptr`, the score for each key will not be returned.
    * @endparblock
    * @param stream The CUDA stream that is used to execute the operation.
+   * @param unique_key If all keys in the same batch are unique.
    *
    */
   void find_or_insert(const size_type n, const key_type* keys,  // (n)
                       value_type* values,                       // (n * DIM)
                       score_type* scores = nullptr,             // (n)
-                      cudaStream_t stream = 0,
+                      cudaStream_t stream = 0, bool unique_key = true,
                       bool ignore_evict_strategy = false) {
     if (n == 0) {
       return;
@@ -741,18 +742,32 @@ class HashTable {
     writer_shared_lock lock(mutex_);
 
     if (is_fast_mode()) {
-      using Selector =
-          SelectFindOrInsertKernelWithIO<key_type, value_type, score_type>;
       static thread_local int step_counter = 0;
       static thread_local float load_factor = 0.0;
 
       if (((step_counter++) % kernel_select_interval_) == 0) {
         load_factor = fast_load_factor(0, stream, false);
       }
-      Selector::execute_kernel(load_factor, options_.block_size,
-                               options_.max_bucket_size, table_->buckets_num,
-                               options_.dim, stream, n, d_table_,
-                               table_->buckets, keys, values, scores);
+
+      using Selector =
+          KernelSelector_FindOrInsert<key_type, value_type, score_type, ArchTag>;
+      if (Selector::callable(unique_key,
+                             static_cast<uint32_t>(options_.max_bucket_size),
+                             static_cast<uint32_t>(options_.dim))) {
+        typename Selector::Params kernelParams(
+            load_factor, table_->buckets, table_->buckets_size,
+            table_->buckets_num, static_cast<uint32_t>(options_.max_bucket_size),
+            static_cast<uint32_t>(options_.dim), keys, values, scores, n);
+        Selector::select_kernel(kernelParams, stream);
+      } else {
+        using Selector =
+            SelectFindOrInsertKernelWithIO<key_type, value_type, score_type>;
+        Selector::execute_kernel(load_factor, options_.block_size,
+                                options_.max_bucket_size, table_->buckets_num,
+                                options_.dim, stream, n, d_table_,
+                                table_->buckets, keys, values, scores);
+      }
+
     } else {
       const size_type dev_ws_size{
           n * (sizeof(value_type*) + sizeof(int) + sizeof(bool))};
