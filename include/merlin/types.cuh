@@ -108,7 +108,6 @@ struct Bucket {
 
   static __forceinline__ __device__ S* scores(K* keys, uint32_t bucket_capacity,
                                               uint32_t offset) {
-    bucket_capacity = umax(bucket_capacity, 128);
     return reinterpret_cast<S*>(keys + bucket_capacity) + offset;
   }
 };

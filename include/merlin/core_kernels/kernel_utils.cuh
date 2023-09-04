@@ -37,6 +37,15 @@ using VecD_Load = byte16;
 // Vector Type of digests for computation.
 using VecD_Comp = byte4;
 
+template <typename T>
+__forceinline__ __device__ T* __shfl_sync_ptr(uint32_t mask, T* var,
+                                              int srcLane,
+                                              int width = warpSize) {
+  uint64_t var64 = reinterpret_cast<uint64_t>(var);
+  var64 = __shfl_sync(mask, var64, srcLane, width);
+  return reinterpret_cast<T*>(var64);
+}
+
 // Select from double buffer.
 // If i % 2 == 0, select buffer 0, else buffer 1.
 __forceinline__ __device__ int same_buf(int i) { return (i & 0x01) ^ 0; }

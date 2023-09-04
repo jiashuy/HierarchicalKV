@@ -346,9 +346,8 @@ void test_basic_when_full(size_t max_hbm_for_vectors) {
   CUDA_CHECK(cudaMemcpy(d_scores, h_scores, KEY_NUM * sizeof(S),
                         cudaMemcpyHostToDevice));
 
-  CUDA_CHECK(cudaMemcpy(d_vectors, h_vectors,
-                          KEY_NUM * sizeof(V) * options.dim,
-                          cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_vectors, h_vectors, KEY_NUM * sizeof(V) * options.dim,
+                        cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemset(d_def_val, 2, KEY_NUM * sizeof(V) * options.dim));
   CUDA_CHECK(cudaMemset(d_found, 0, KEY_NUM * sizeof(bool)));
 
@@ -2716,8 +2715,7 @@ TEST(FindOrInsertTest, test_basic) {
 }
 TEST(FindOrInsertTest, test_basic_when_full) {
   test_basic_when_full(16);
-  ///TODO: reopen when fixup the hybrid mode find_or_insert.
-  // test_basic_when_full(0);
+  test_basic_when_full(0);
 }
 TEST(FindOrInsertTest, test_erase_if_pred) {
   test_erase_if_pred(16);
@@ -2762,5 +2760,5 @@ TEST(FindOrInsertTest, test_evict_strategy_customized_correct_rate) {
 TEST(FindOrInsertTest, test_find_or_insert_values_check) {
   test_find_or_insert_values_check(16);
   // TODO(rhdong): Add back when diff error issue fixed in hybrid mode.
-  // test_insert_or_assign_values_check(0);
+  test_find_or_insert_values_check(0);
 }
