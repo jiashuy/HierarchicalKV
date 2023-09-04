@@ -26,9 +26,9 @@ template <typename K = uint64_t, typename V = byte4, typename S = uint64_t,
           typename VecV = byte16, uint32_t BLOCK_SIZE = 128>
 __global__ void tlp_v1_find_or_insert_kernel_with_io(
     Bucket<K, V, S>* __restrict__ buckets, int32_t* __restrict__ buckets_size,
-    const uint64_t buckets_num, uint32_t bucket_capacity, const uint32_t dim, 
-    const K* __restrict__ keys, VecV* __restrict__ values, S* __restrict__ scores, 
-    uint64_t n) {
+    const uint64_t buckets_num, uint32_t bucket_capacity, const uint32_t dim,
+    const K* __restrict__ keys, VecV* __restrict__ values,
+    S* __restrict__ scores, uint64_t n) {
   using BUCKET = Bucket<K, V, S>;
   using CopyValue = CopyValueMultipleGroup<VecV, 1>;
 
@@ -220,8 +220,7 @@ __global__ void tlp_v1_find_or_insert_kernel_with_io(
 
   if (occupy_result != OccupyResult::REFUSED) {
     if (occupy_result == OccupyResult::DUPLICATE) {
-      if (scores)
-        *(scores + kv_idx) = score;
+      if (scores) *(scores + kv_idx) = score;
       CopyValue::ldg_stg(0, param_value_ptr, bucket_value_ptr, dim);
     } else {
       CopyValue::ldg_stg(0, bucket_value_ptr, param_value_ptr, dim);
@@ -235,12 +234,13 @@ __global__ void tlp_v1_find_or_insert_kernel_with_io(
 
 // Use 1 thread to deal with a KV-pair, including copying value.
 template <typename K = uint64_t, typename V = byte4, typename S = uint64_t,
-          typename VecV = byte16, uint32_t BLOCK_SIZE = 128, uint32_t GROUP_SIZE = 16>
+          typename VecV = byte16, uint32_t BLOCK_SIZE = 128,
+          uint32_t GROUP_SIZE = 16>
 __global__ void tlp_v2_find_or_insert_kernel_with_io(
     Bucket<K, V, S>* __restrict__ buckets, int32_t* __restrict__ buckets_size,
-    const uint64_t buckets_num, uint32_t bucket_capacity, const uint32_t dim, 
-    const K* __restrict__ keys, VecV* __restrict__ values, S* __restrict__ scores, 
-    uint64_t n) {
+    const uint64_t buckets_num, uint32_t bucket_capacity, const uint32_t dim,
+    const K* __restrict__ keys, VecV* __restrict__ values,
+    S* __restrict__ scores, uint64_t n) {
   using BUCKET = Bucket<K, V, S>;
   using CopyValue = CopyValueMultipleGroup<VecV, GROUP_SIZE>;
   auto g = cg::tiled_partition<GROUP_SIZE>(cg::this_thread_block());
@@ -453,9 +453,9 @@ __global__ void tlp_v2_find_or_insert_kernel_with_io(
   constexpr uint32_t GROUP_BUF = GROUP_BUFs / 2;
   auto sm_values_buffer =
       reinterpret_cast<VecV*>(&(sm_bucket_scores[0][0])) + groupID * GROUP_BUFs;
-  
+
   auto occupy_result_next = g.shfl(occupy_result, 0);
-  if ((occupy_result_next != OccupyResult::ILLEGAL) && 
+  if ((occupy_result_next != OccupyResult::ILLEGAL) &&
       (occupy_result_next != OccupyResult::REFUSED)) {
     VecV* dst = sm_values_buffer;
     if (occupy_result_next == OccupyResult::DUPLICATE) {
@@ -472,7 +472,7 @@ __global__ void tlp_v2_find_or_insert_kernel_with_io(
   for (int i = 0; i < GROUP_SIZE; i++) {
     if (i + 1 < GROUP_SIZE) {
       auto occupy_result_next = g.shfl(occupy_result, i + 1);
-      if ((occupy_result_next != OccupyResult::ILLEGAL) && 
+      if ((occupy_result_next != OccupyResult::ILLEGAL) &&
           (occupy_result_next != OccupyResult::REFUSED)) {
         VecV* dst = sm_values_buffer + diff_buf(i) * GROUP_BUF;
         if (occupy_result_next == OccupyResult::DUPLICATE) {
@@ -487,7 +487,7 @@ __global__ void tlp_v2_find_or_insert_kernel_with_io(
     }
     __pipeline_commit();
     auto occupy_result_cur = g.shfl(occupy_result, i);
-    if ((occupy_result_cur != OccupyResult::ILLEGAL) && 
+    if ((occupy_result_cur != OccupyResult::ILLEGAL) &&
         (occupy_result_cur != OccupyResult::REFUSED)) {
       VecV* src = sm_values_buffer + same_buf(i) * GROUP_BUF;
       __pipeline_wait_prior(0);
@@ -506,8 +506,8 @@ __global__ void tlp_v2_find_or_insert_kernel_with_io(
       }
     }
   }
-  
-  if ((occupy_result != OccupyResult::ILLEGAL) && 
+
+  if ((occupy_result != OccupyResult::ILLEGAL) &&
       (occupy_result != OccupyResult::REFUSED)) {
     auto key_address = BUCKET::keys(bucket_keys_ptr, key_pos);
     // memory_order_release:
@@ -516,24 +516,28 @@ __global__ void tlp_v2_find_or_insert_kernel_with_io(
   }
 }
 
-template <typename K, typename V, typename S, typename VecV,
-          uint32_t BLOCK_SIZE, uint32_t GROUP_SIZE, uint32_t BUCKET_SIZE,
-          uint32_t GROUP_NUM = BLOCK_SIZE / GROUP_SIZE,
-          uint32_t OFST_ParamScores = 0,
-          uint32_t OFST_BucketValuesPtr = OFST_ParamScores + sizeof(S) * BLOCK_SIZE,
-          uint32_t OFST_BucketsSizePtr = OFST_BucketValuesPtr + sizeof(VecV*) * BLOCK_SIZE,
-          uint32_t OFST_BucketDigests = OFST_BucketsSizePtr + sizeof(int*) * BLOCK_SIZE,
-          uint32_t OFST_BucketScores = OFST_BucketDigests + sizeof(D) * GROUP_NUM * 2 * BUCKET_SIZE,
-          uint32_t OFST_BucketValues = OFST_BucketScores + sizeof(S) * GROUP_NUM * 2 * BUCKET_SIZE>
+template <
+    typename K, typename V, typename S, typename VecV, uint32_t BLOCK_SIZE,
+    uint32_t GROUP_SIZE, uint32_t BUCKET_SIZE,
+    uint32_t GROUP_NUM = BLOCK_SIZE / GROUP_SIZE, uint32_t OFST_ParamScores = 0,
+    uint32_t OFST_BucketValuesPtr = OFST_ParamScores + sizeof(S) * BLOCK_SIZE,
+    uint32_t OFST_BucketsSizePtr =
+        OFST_BucketValuesPtr + sizeof(VecV*) * BLOCK_SIZE,
+    uint32_t OFST_BucketDigests =
+        OFST_BucketsSizePtr + sizeof(int*) * BLOCK_SIZE,
+    uint32_t OFST_BucketScores =
+        OFST_BucketDigests + sizeof(D) * GROUP_NUM * 2 * BUCKET_SIZE,
+    uint32_t OFST_BucketValues =
+        OFST_BucketScores + sizeof(S) * GROUP_NUM * 2 * BUCKET_SIZE>
 struct SharedMemoryManager_Pipeline_FindOrInsert {
-/*
-  __shared__ S sm_param_scores[BLOCK_SIZE];
-  __shared__ VecV* sm_bucket_values_ptr[BLOCK_SIZE];
-  __shared__ int* sm_buckets_size_ptr[BLOCK_SIZE];
-  __shared__ D sm_bucket_digests[GROUP_NUM][2][BUCKET_SIZE];
-  __shared__ S sm_bucket_scores[GROUP_NUM][2][BUCKET_SIZE];
-  __shared__ VecV sm_values_buffer[GROUP_NUM][2][dim];
-*/
+  /*
+    __shared__ S sm_param_scores[BLOCK_SIZE];
+    __shared__ VecV* sm_bucket_values_ptr[BLOCK_SIZE];
+    __shared__ int* sm_buckets_size_ptr[BLOCK_SIZE];
+    __shared__ D sm_bucket_digests[GROUP_NUM][2][BUCKET_SIZE];
+    __shared__ S sm_bucket_scores[GROUP_NUM][2][BUCKET_SIZE];
+    __shared__ VecV sm_values_buffer[GROUP_NUM][2][dim];
+  */
   static inline uint32_t total_size(uint32_t dim) {
     return BLOCK_SIZE * (sizeof(S) + sizeof(VecV*) + sizeof(int*)) +
            GROUP_NUM * 2 *
@@ -733,7 +737,7 @@ __global__ void pipeline_find_or_insert_kernel_with_io(
                   scores == nullptr ? device_nano<S>() : sm_param_scores[tx];
               key_pos = possible_pos;
               update_score_digest<K, V, S>(bucket_keys_ptr, BUCKET_SIZE,
-                                          key_pos, key, score);
+                                           key_pos, key, score);
               atomicAdd(bucket_size_ptr, 1);
             }
             break;
@@ -1009,7 +1013,8 @@ __global__ void pipeline_find_or_insert_kernel_with_io(
   occupy_result_cur = g.shfl(occupy_result, GROUP_SIZE - 1);
   if (occupy_result_cur != OccupyResult::ILLEGAL &&
       occupy_result_cur != OccupyResult::REFUSED) {
-    VecV* src = SMM::values_buffer(smem, groupID, same_buf(GROUP_SIZE + 1), dim);
+    VecV* src =
+        SMM::values_buffer(smem, groupID, same_buf(GROUP_SIZE + 1), dim);
     if (occupy_result_cur == OccupyResult::DUPLICATE) {
       if (rank == GROUP_SIZE - 1 && scores) {
         *(scores + kv_idx) = sm_param_scores[tx];
@@ -1036,10 +1041,12 @@ __global__ void pipeline_find_or_insert_kernel_with_io(
 
 template <typename K = uint64_t, typename V = float, typename S = uint64_t>
 struct Params_FindOrInsert {
-  Params_FindOrInsert(float load_factor_, Bucket<K, V, S>* __restrict__ buckets_,
-                int* buckets_size_, size_t buckets_num_, uint32_t bucket_capacity_, 
-                uint32_t dim_, const K* __restrict__ keys_, V* __restrict__ values_,
-                S* __restrict__ scores_, size_t n_)
+  Params_FindOrInsert(float load_factor_,
+                      Bucket<K, V, S>* __restrict__ buckets_,
+                      int* buckets_size_, size_t buckets_num_,
+                      uint32_t bucket_capacity_, uint32_t dim_,
+                      const K* __restrict__ keys_, V* __restrict__ values_,
+                      S* __restrict__ scores_, size_t n_)
       : load_factor(load_factor_),
         buckets(buckets_),
         buckets_size(buckets_size_),
@@ -1087,7 +1094,7 @@ struct Launch_TLPv2_FindOrInsert {
     if (value_size <= 256) {
       constexpr int GROUP_SIZE = 8;
       tlp_v2_find_or_insert_kernel_with_io<K, V, S, VecV, BLOCK_SIZE,
-                                          GROUP_SIZE>
+                                           GROUP_SIZE>
           <<<(params.n + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
               params.buckets, params.buckets_size, params.buckets_num,
               params.bucket_capacity, params.dim, params.keys,
@@ -1095,7 +1102,7 @@ struct Launch_TLPv2_FindOrInsert {
     } else {
       constexpr int GROUP_SIZE = 16;
       tlp_v2_find_or_insert_kernel_with_io<K, V, S, VecV, BLOCK_SIZE,
-                                          GROUP_SIZE>
+                                           GROUP_SIZE>
           <<<(params.n + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
               params.buckets, params.buckets_size, params.buckets_num,
               params.bucket_capacity, params.dim, params.keys,
@@ -1113,7 +1120,7 @@ struct Launch_Pipeline_FindOrInsert {
     constexpr uint32_t BUCKET_SIZE = 128;
     using SMM =
         SharedMemoryManager_Pipeline_FindOrInsert<K, V, S, VecV, BLOCK_SIZE,
-                                                    GROUP_SIZE, BUCKET_SIZE>;
+                                                  GROUP_SIZE, BUCKET_SIZE>;
 
     params.dim = params.dim * sizeof(V) / sizeof(VecV);
     uint32_t shared_mem = SMM::total_size(params.dim);
@@ -1122,8 +1129,9 @@ struct Launch_Pipeline_FindOrInsert {
     pipeline_find_or_insert_kernel_with_io<K, V, S, VecV, BLOCK_SIZE>
         <<<(params.n + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, shared_mem,
            stream>>>(params.buckets, params.buckets_size, params.buckets_num,
-                     params.dim, params.keys, reinterpret_cast<VecV*>(params.values),
-                     params.scores, params.n);
+                     params.dim, params.keys,
+                     reinterpret_cast<VecV*>(params.values), params.scores,
+                     params.n);
   }
 };
 
@@ -1166,48 +1174,38 @@ struct KernelSelector_FindOrInsert<K, V, S, Sm80> {
     auto launch_TLPv1 = [&]() {
       if (total_value_size % sizeof(byte16) == 0) {
         using VecV = byte16;
-        Launch_TLPv1_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                  stream);
+        Launch_TLPv1_FindOrInsert<K, V, S, VecV>::launch_kernel(params, stream);
       } else if (total_value_size % sizeof(byte8) == 0) {
         using VecV = byte8;
-        Launch_TLPv1_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                  stream);
+        Launch_TLPv1_FindOrInsert<K, V, S, VecV>::launch_kernel(params, stream);
       } else if (total_value_size % sizeof(byte4) == 0) {
         using VecV = byte4;
-        Launch_TLPv1_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                  stream);
+        Launch_TLPv1_FindOrInsert<K, V, S, VecV>::launch_kernel(params, stream);
       } else if (total_value_size % sizeof(byte2) == 0) {
         using VecV = byte2;
-        Launch_TLPv1_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                  stream);
+        Launch_TLPv1_FindOrInsert<K, V, S, VecV>::launch_kernel(params, stream);
       } else {
         using VecV = byte;
-        Launch_TLPv1_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                  stream);
+        Launch_TLPv1_FindOrInsert<K, V, S, VecV>::launch_kernel(params, stream);
       }
     };
 
     auto launch_TLPv2 = [&]() {
       if (total_value_size % sizeof(byte16) == 0) {
         using VecV = byte16;
-        Launch_TLPv2_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                  stream);
+        Launch_TLPv2_FindOrInsert<K, V, S, VecV>::launch_kernel(params, stream);
       } else if (total_value_size % sizeof(byte8) == 0) {
         using VecV = byte8;
-        Launch_TLPv2_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                  stream);
+        Launch_TLPv2_FindOrInsert<K, V, S, VecV>::launch_kernel(params, stream);
       } else if (total_value_size % sizeof(byte4) == 0) {
         using VecV = byte4;
-        Launch_TLPv2_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                  stream);
+        Launch_TLPv2_FindOrInsert<K, V, S, VecV>::launch_kernel(params, stream);
       } else if (total_value_size % sizeof(byte2) == 0) {
         using VecV = byte2;
-        Launch_TLPv2_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                  stream);
+        Launch_TLPv2_FindOrInsert<K, V, S, VecV>::launch_kernel(params, stream);
       } else {
         using VecV = byte;
-        Launch_TLPv2_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                  stream);
+        Launch_TLPv2_FindOrInsert<K, V, S, VecV>::launch_kernel(params, stream);
       }
     };
 
@@ -1215,23 +1213,23 @@ struct KernelSelector_FindOrInsert<K, V, S, Sm80> {
       if (total_value_size % sizeof(byte16) == 0) {
         using VecV = byte16;
         Launch_Pipeline_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                     stream);
+                                                                   stream);
       } else if (total_value_size % sizeof(byte8) == 0) {
         using VecV = byte8;
         Launch_Pipeline_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                     stream);
+                                                                   stream);
       } else if (total_value_size % sizeof(byte4) == 0) {
         using VecV = byte4;
         Launch_Pipeline_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                     stream);
+                                                                   stream);
       } else if (total_value_size % sizeof(byte2) == 0) {
         using VecV = byte2;
         Launch_Pipeline_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                     stream);
+                                                                   stream);
       } else {
         using VecV = byte;
         Launch_Pipeline_FindOrInsert<K, V, S, VecV>::launch_kernel(params,
-                                                                     stream);
+                                                                   stream);
       }
     };
 
@@ -1387,6 +1385,269 @@ struct SelectFindOrInsertKernelWithIO {
     return;
   }
 };
+
+// Use 1 thread to deal with a KV-pair.
+template <typename K = uint64_t, typename V = byte4, typename S = uint64_t,
+          uint32_t BLOCK_SIZE = 128>
+__global__ void find_or_insert_kernel_lock_key_hybrid(
+    Bucket<K, V, S>* __restrict__ buckets, int32_t* __restrict__ buckets_size,
+    const uint64_t buckets_num, uint32_t bucket_capacity, const uint32_t dim,
+    const K* __restrict__ keys, V** __restrict__ value_ptrs,
+    S* __restrict__ scores, K** __restrict__ key_ptrs,
+    int* __restrict keys_index, bool* __restrict__ founds, uint64_t n) {
+  using BUCKET = Bucket<K, V, S>;
+
+  // bucket_capacity is a multiple of 4.
+  constexpr uint32_t STRIDE_S = 4;
+  constexpr uint32_t Load_LEN_S = sizeof(byte16) / sizeof(S);
+  __shared__ S sm_bucket_scores[BLOCK_SIZE][2 * STRIDE_S];
+
+  uint32_t tx = threadIdx.x;
+  uint32_t kv_idx = blockIdx.x * blockDim.x + tx;
+  K key{static_cast<K>(EMPTY_KEY)};
+  S score{static_cast<S>(EMPTY_SCORE)};
+  OccupyResult occupy_result{OccupyResult::INITIAL};
+  VecD_Comp target_digests{0};
+  V* bucket_values_ptr{nullptr};
+  K* bucket_keys_ptr{nullptr};
+  int32_t* bucket_size_ptr{nullptr};
+  uint32_t key_pos = {0};
+  uint32_t bucket_size{0};
+  if (kv_idx < n) {
+    key = keys[kv_idx];
+
+    // help to address the original key after sorting value pointers.
+    if (keys_index) {
+      keys_index[kv_idx] = kv_idx;
+    }
+
+    score = scores != nullptr ? scores[kv_idx] : static_cast<S>(MAX_SCORE);
+    if (!IS_RESERVED_KEY(key)) {
+      const K hashed_key = Murmur3HashDevice(key);
+      target_digests = digests_from_hashed<K>(hashed_key);
+      uint64_t global_idx =
+          static_cast<uint64_t>(hashed_key % (buckets_num * bucket_capacity));
+      key_pos = get_start_position(global_idx, bucket_capacity);
+      uint64_t bkt_idx = global_idx / bucket_capacity;
+      bucket_size_ptr = buckets_size + bkt_idx;
+      BUCKET* bucket = buckets + bkt_idx;
+      bucket_size = *bucket_size_ptr;
+      bucket_keys_ptr = reinterpret_cast<K*>(bucket->keys(0));
+      bucket_values_ptr = reinterpret_cast<V*>(bucket->vectors);
+    } else {
+      key_ptrs[kv_idx] = nullptr;
+      return;
+    }
+  } else {
+    return;
+  }
+
+  // Load `STRIDE` digests every time.
+  constexpr uint32_t STRIDE = sizeof(VecD_Load) / sizeof(D);
+  // One more loop to handle empty keys.
+  for (int offset = 0; offset < bucket_capacity + STRIDE; offset += STRIDE) {
+    if (occupy_result != OccupyResult::INITIAL) break;
+
+    uint32_t pos_cur = align_to<STRIDE>(key_pos);
+    pos_cur = (pos_cur + offset) & (bucket_capacity - 1);
+
+    D* digests_ptr = BUCKET::digests(bucket_keys_ptr, bucket_capacity, pos_cur);
+    VecD_Load digests_vec = *(reinterpret_cast<VecD_Load*>(digests_ptr));
+    VecD_Comp digests_arr[4] = {digests_vec.x, digests_vec.y, digests_vec.z,
+                                digests_vec.w};
+
+    for (int i = 0; i < 4; i++) {
+      VecD_Comp probe_digests = digests_arr[i];
+      uint32_t possible_pos = 0;
+      bool result = false;
+      // Perform a vectorized comparison by byte,
+      // and if they are equal, set the corresponding byte in the result to
+      // 0xff.
+      int cmp_result = __vcmpeq4(probe_digests, target_digests);
+      cmp_result &= 0x01010101;
+      do {
+        if (cmp_result == 0) break;
+        // CUDA uses little endian,
+        // and the lowest byte in register stores in the lowest address.
+        uint32_t index = (__ffs(cmp_result) - 1) >> 3;
+        cmp_result &= (cmp_result - 1);
+        possible_pos = pos_cur + i * 4 + index;
+        auto current_key = BUCKET::keys(bucket_keys_ptr, possible_pos);
+        K expected_key = key;
+        // Modifications to the bucket will not before this instruction.
+        result = current_key->compare_exchange_strong(
+            expected_key, static_cast<K>(LOCKED_KEY),
+            cuda::std::memory_order_acquire, cuda::std::memory_order_relaxed);
+      } while (!result);
+      if (result) {
+        occupy_result = OccupyResult::DUPLICATE;
+        key_pos = possible_pos;
+        S* src = BUCKET::scores(bucket_keys_ptr, bucket_capacity, key_pos);
+        score = *src;
+        break;
+      } else if (bucket_size == bucket_capacity) {
+        continue;
+      }
+      VecD_Comp empty_digests_ = empty_digests<K>();
+      cmp_result = __vcmpeq4(probe_digests, empty_digests_);
+      cmp_result &= 0x01010101;
+      do {
+        if (cmp_result == 0) break;
+        uint32_t index = (__ffs(cmp_result) - 1) >> 3;
+        cmp_result &= (cmp_result - 1);
+        possible_pos = pos_cur + i * 4 + index;
+        if (offset == 0 && possible_pos < key_pos) continue;
+        auto current_key = BUCKET::keys(bucket_keys_ptr, possible_pos);
+        K expected_key = static_cast<K>(EMPTY_KEY);
+        result = current_key->compare_exchange_strong(
+            expected_key, static_cast<K>(LOCKED_KEY),
+            cuda::std::memory_order_acquire, cuda::std::memory_order_relaxed);
+      } while (!result);
+      if (result) {
+        occupy_result = OccupyResult::OCCUPIED_EMPTY;
+        key_pos = possible_pos;
+        score = scores == nullptr ? device_nano<S>() : score;
+        update_score_digest<K, V, S>(bucket_keys_ptr, bucket_capacity, key_pos,
+                                     key, score);
+        atomicAdd(bucket_size_ptr, 1);
+        break;
+      }
+    }
+  }
+
+  while (occupy_result == OccupyResult::INITIAL) {
+    S* bucket_scores_ptr = BUCKET::scores(bucket_keys_ptr, bucket_capacity, 0);
+    S min_score = MAX_SCORE;
+    int min_pos = -1;
+#pragma unroll
+    for (int j = 0; j < STRIDE_S; j += Load_LEN_S) {
+      __pipeline_memcpy_async(sm_bucket_scores[tx] + j, bucket_scores_ptr + j,
+                              sizeof(S) * Load_LEN_S);
+    }
+    __pipeline_commit();
+    for (int i = 0; i < bucket_capacity; i += STRIDE_S) {
+      if (i < bucket_capacity - STRIDE_S) {
+#pragma unroll
+        for (int j = 0; j < STRIDE_S; j += Load_LEN_S) {
+          __pipeline_memcpy_async(
+              sm_bucket_scores[tx] + diff_buf(i / STRIDE_S) * STRIDE_S + j,
+              bucket_scores_ptr + i + STRIDE_S + j, sizeof(S) * Load_LEN_S);
+        }
+      }
+      __pipeline_commit();
+      __pipeline_wait_prior(1);
+      S temp_scores[Load_LEN_S];
+      S* src = sm_bucket_scores[tx] + same_buf(i / STRIDE_S) * STRIDE_S;
+#pragma unroll
+      for (int k = 0; k < STRIDE_S; k += Load_LEN_S) {
+        *reinterpret_cast<byte16*>(temp_scores) =
+            *reinterpret_cast<byte16*>(src + k);
+#pragma unroll
+        for (int j = 0; j < Load_LEN_S; j += 1) {
+          S temp_score = temp_scores[j];
+          if (temp_score < min_score) {
+            auto verify_key_ptr = BUCKET::keys(bucket_keys_ptr, i + k + j);
+            auto verify_key =
+                verify_key_ptr->load(cuda::std::memory_order_relaxed);
+            if (verify_key != static_cast<K>(LOCKED_KEY) &&
+                verify_key != static_cast<K>(EMPTY_KEY)) {
+              min_score = temp_score;
+              min_pos = i + k + j;
+            }
+          }
+        }
+      }
+    }
+    score = scores == nullptr ? device_nano<S>() : score;
+    if (score <= min_score) {
+      occupy_result = OccupyResult::REFUSED;
+      break;
+    }
+    auto min_score_key = BUCKET::keys(bucket_keys_ptr, min_pos);
+    auto expected_key = min_score_key->load(cuda::std::memory_order_relaxed);
+    if (expected_key != static_cast<K>(LOCKED_KEY) &&
+        expected_key != static_cast<K>(EMPTY_KEY)) {
+      bool result = min_score_key->compare_exchange_strong(
+          expected_key, static_cast<K>(LOCKED_KEY),
+          cuda::std::memory_order_acquire, cuda::std::memory_order_relaxed);
+      if (result) {
+        S* min_score_ptr =
+            BUCKET::scores(bucket_keys_ptr, bucket_capacity, min_pos);
+        auto verify_score_ptr =
+            reinterpret_cast<AtomicScore<S>*>(min_score_ptr);
+        auto verify_score =
+            verify_score_ptr->load(cuda::std::memory_order_relaxed);
+        if (verify_score <= min_score) {
+          key_pos = min_pos;
+          score = scores == nullptr ? device_nano<S>() : score;
+          update_score_digest<K, V, S>(bucket_keys_ptr, bucket_capacity,
+                                       key_pos, key, score);
+          if (expected_key == static_cast<K>(RECLAIM_KEY)) {
+            occupy_result = OccupyResult::OCCUPIED_RECLAIMED;
+            atomicAdd(bucket_size_ptr, 1);
+          } else {
+            occupy_result = OccupyResult::EVICT;
+          }
+        } else {
+          min_score_key->store(expected_key, cuda::std::memory_order_release);
+        }
+      }
+    }
+  }
+
+  if (kv_idx < n) {
+    if (occupy_result == OccupyResult::REFUSED) {
+      value_ptrs[kv_idx] = nullptr;
+      key_ptrs[kv_idx] = nullptr;
+    } else {
+      value_ptrs[kv_idx] = bucket_values_ptr + key_pos * dim;
+      if (occupy_result == OccupyResult::DUPLICATE) {
+        founds[kv_idx] = true;
+        if (scores) scores[kv_idx] = score;
+      } else {
+        founds[kv_idx] = false;
+      }
+      auto key_address = BUCKET::keys(bucket_keys_ptr, key_pos);
+      key_ptrs[kv_idx] = reinterpret_cast<K*>(key_address);
+    }
+  }
+}
+
+template <class K, class V, class S, class VecV = byte16>
+__global__ void read_or_write_kernel_unlock_key(
+    VecV** __restrict table_value_addrs, VecV* __restrict param_values,
+    const bool* mask, const int* __restrict param_key_index,
+    K** __restrict__ key_ptrs, const K* __restrict__ keys, const size_t dim,
+    const size_t N) {
+  size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
+
+  for (size_t t = tid; t < N; t += blockDim.x * gridDim.x) {
+    int vec_index = int(t / dim);
+    int dim_index = t % dim;
+    int real_key_index =
+        param_key_index != nullptr ? param_key_index[vec_index] : vec_index;
+
+    K* key_ptr = key_ptrs[real_key_index];
+    K key = keys[real_key_index];
+
+    /// if found, read the value form table, otherwise write it
+    if (table_value_addrs[vec_index] != nullptr) {
+      // unlock the key.
+      if (key_ptr && dim_index == 0) *key_ptr = key;
+
+      /// find
+      if (mask[real_key_index]) {
+        param_values[real_key_index * dim + dim_index] =
+            table_value_addrs[vec_index][dim_index];
+      }
+      /// insert
+      else {
+        table_value_addrs[vec_index][dim_index] =
+            param_values[real_key_index * dim + dim_index];
+      }
+    }
+  }
+}
 
 /* find or insert with the end-user specified score.
  */
