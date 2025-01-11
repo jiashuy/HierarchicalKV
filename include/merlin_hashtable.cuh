@@ -21,6 +21,7 @@
 #include <thrust/sort.h>
 #include <atomic>
 #include <cstdint>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -1683,6 +1684,104 @@ class HashTable : public HashTableBase<K, V, S> {
 
     CudaCheckError();
   }
+
+  /**
+   * @brief Searches the hash table for the specified keys and returns address
+   * of the values. When a key is missing, the value in @p values and @p scores
+   * will be inserted.
+   * This function will reserve a position in the table for each key in keys and
+   *  lock it.
+   *
+   * @warning This API returns internal addresses for high-performance. The caller
+   *  is responsible for calling find_or_insert_unlock to unlock keys in key_ptrs.
+   *  If a key is refused to insert to the table, the item in key_ptrs will be set to nullptr.
+   *
+   * @param n The number of key-value-score tuples to search or insert.
+   * @param keys The keys to search on GPU-accessible memory with shape (n).
+   * @param values  The addresses of values to search on GPU-accessible memory
+   * with shape (n).
+   * @param founds The status that indicates if the keys are found on
+   * @param scores The scores to search on GPU-accessible memory with shape (n).
+   * @param key_ptrs The pointers of locked keys in the table with shape (n).
+   * @parblock
+   * If @p scores is `nullptr`, the score for each key will not be returned.
+   * @endparblock
+   * @param stream The CUDA stream that is used to execute the operation.
+   * @param unique_key If all keys in the same batch are unique.
+   *
+   */
+  void find_or_insert_lock(const size_type n, const key_type* keys,  // (n)
+                           value_type** values,                      // (n)
+                           bool* founds,                             // (n)
+                           score_type* scores = nullptr,             // (n)
+                           key_type** key_ptrs,                      // (n)
+                           cudaStream_t stream = 0, bool unique_key = true,
+                           bool ignore_evict_strategy = false) {
+    if (n == 0) {
+      return;
+    }
+
+    while (!reach_max_capacity_ &&
+           fast_load_factor(n, stream) > options_.max_load_factor) {
+      reserve(capacity() * 2, stream);
+    }
+
+    if (!ignore_evict_strategy) {
+      check_evict_strategy(scores);
+    }
+
+    insert_unique_lock lock(mutex_, stream);
+
+    constexpr uint32_t MinBucketCapacityFilter = sizeof(VecD_Load) / sizeof(D);
+
+    if (unique_key && options_.max_bucket_size >= MinBucketCapacityFilter) {
+      std::throw std::invalid_argument("unique_key should be true and max_bucket_size should be larger.");
+    }
+
+    constexpr uint32_t BLOCK_SIZE = 128U;
+    find_or_insert_ptr_kernel_lock_key<key_type, value_type, score_type,
+                                        BLOCK_SIZE, evict_strategy>
+        <<<(n + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+            table_->buckets, table_->buckets_size, table_->buckets_num,
+            options_.max_bucket_size, options_.dim, keys, values, scores,
+            keys_ptr, n, founds, global_epoch_);
+  }
+
+  /**
+   * @brief Using pointers to address the keys in the hash table and set them 
+   * to target keys.
+   * This function will unlock the positions in the table which are locked by 
+   * the previous call to find_or_insert_lock.
+   *
+   * @param n The number of key-value-score tuples to search or insert.
+   * @param keys The keys to search on GPU-accessible memory with shape (n).
+   * @param key_ptrs The pointers of locked keys in the table with shape (n).
+   * @param stream The CUDA stream that is used to execute the operation.
+   * @param unique_key If all keys in the same batch are unique.
+   *
+   */
+  void find_or_insert_unlock(const size_type n, const key_type* keys,  // (n)
+                             key_type** key_ptrs,                      // (n)
+                             cudaStream_t stream = 0, bool unique_key = true,
+                             bool ignore_evict_strategy = false) {
+    if (n == 0) {
+      return;
+    }
+
+    insert_unique_lock lock(mutex_, stream);
+
+    constexpr uint32_t MinBucketCapacityFilter = sizeof(VecD_Load) / sizeof(D);
+
+    if (unique_key && options_.max_bucket_size >= MinBucketCapacityFilter) {
+      std::throw std::invalid_argument("unique_key should be true and max_bucket_size should be larger.");
+    }
+
+    constexpr uint32_t BLOCK_SIZE = 128U;
+    find_or_insert_ptr_kernel_unlock_key<key_type>
+        <<<(n + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+            keys, keys_ptr, n);
+  }
+
   /**
    * @brief Assign new key-value-score tuples into the hash table.
    * If the key doesn't exist, the operation on the key will be ignored.
