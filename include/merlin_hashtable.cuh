@@ -491,7 +491,8 @@ class HashTableBase {
                              const key_type* keys,                // (n)
                              const score_type* scores = nullptr,  // (n)
                              cudaStream_t stream = 0,
-                             bool unique_key = true) = 0;
+                             bool unique_key = true,
+                             bool ignore_evict_strategy = false) = 0;
 
   /**
    * @brief Alias of `assign_scores`.
@@ -1858,12 +1859,15 @@ class HashTable : public HashTableBase<K, V, S> {
   void assign_scores(const size_type n,
                      const key_type* keys,                // (n)
                      const score_type* scores = nullptr,  // (n)
-                     cudaStream_t stream = 0, bool unique_key = true) {
+                     cudaStream_t stream = 0, bool unique_key = true,
+                     bool ignore_evict_strategy = false) {
     if (n == 0) {
       return;
     }
 
-    check_evict_strategy(scores);
+    if (!ignore_evict_strategy) {
+      check_evict_strategy(scores);
+    }
 
     {
       update_shared_lock lock(mutex_, stream);

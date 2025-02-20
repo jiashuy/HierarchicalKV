@@ -302,6 +302,16 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLru> {
     // Cache in L2 cache, bypass L1 Cache.
     __stcg(dst_score_ptr, device_nano<S>());
   }
+
+  __forceinline__ __device__ static void update_score_when_found(
+      K* bucket_keys_ptr, const uint32_t key_pos, 
+      const S* __restrict const input_scores, const int key_idx, 
+      const uint32_t bucket_capacity) {
+    S* dst_score_ptr =
+        BUCKET::scores(bucket_keys_ptr, bucket_capacity, key_pos);
+    // Cache in L2 cache, bypass L1 Cache.
+    __stcg(dst_score_ptr, device_nano<S>());
+  }
 };
 
 template <class K, class V, class S>
@@ -373,6 +383,11 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kLfu> {
     // Cache in L2 cache, bypass L1 Cache.
     __stcg(dst_score_ptr, input_scores[key_idx] + *dst_score_ptr);
   }
+
+  __forceinline__ __device__ static void update_score_when_found(
+      K* bucket_keys_ptr, const uint32_t key_pos, 
+      const S* __restrict const input_scores, const int key_idx, 
+      const uint32_t bucket_capacity) {}
 };
 
 template <class K, class V, class S>
@@ -434,6 +449,12 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLru> {
     // Cache in L2 cache, bypass L1 Cache.
     __stcg(dst_score_ptr, make_epoch<S>(epoch) | make_nano<S>());
   }
+
+  __forceinline__ __device__ static void update_score_when_found(
+      K* bucket_keys_ptr, const uint32_t key_pos, 
+      const S* __restrict const input_scores, const int key_idx, 
+      const uint32_t bucket_capacity) {}
+
 };
 
 template <class K, class V, class S>
@@ -537,6 +558,12 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kEpochLfu> {
     // Cache in L2 cache, bypass L1 Cache.
     __stcg(dst_score_ptr, new_score);
   }
+
+  __forceinline__ __device__ static void update_score_when_found(
+      K* bucket_keys_ptr, const uint32_t key_pos, 
+      const S* __restrict const input_scores, const int key_idx, 
+      const uint32_t bucket_capacity) {}
+
 };
 
 template <class K, class V, class S>
@@ -595,6 +622,12 @@ struct ScoreFunctor<K, V, S, EvictStrategyInternal::kCustomized> {
     // Cache in L2 cache, bypass L1 Cache.
     __stcg(dst_score_ptr, input_scores[key_idx]);
   }
+
+  __forceinline__ __device__ static void update_score_when_found(
+      K* bucket_keys_ptr, const uint32_t key_pos, 
+      const S* __restrict const input_scores, const int key_idx, 
+      const uint32_t bucket_capacity) {}
+
 };
 
 template <class V, uint32_t TILE_SIZE = 4>

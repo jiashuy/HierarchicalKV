@@ -113,6 +113,7 @@ __global__ void find_or_insert_ptr_kernel_lock_key(
       if (result) {
         occupy_result = OccupyResult::DUPLICATE;
         key_pos = possible_pos;
+        ScoreFunctor::update_score_when_found(bucket_keys_ptr, key_pos, scores, kv_idx, bucket_capacity);
         S* src = BUCKET::scores(bucket_keys_ptr, bucket_capacity, key_pos);
         score = *src;
         break;
