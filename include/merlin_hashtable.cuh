@@ -2470,7 +2470,7 @@ class HashTable : public HashTableBase<K, V, S> {
    * @brief Erase the key-value-score tuples which match @tparam PredFunctor.
    * @param pred A functor with template <K, V, S> defined an operator with
    * signature:  __device__ (bool*)(const K&, const V*, const S&, const
-   * cg::tiled_partition<GroupSize>&).
+   * cg::thread_block_tile<GroupSize>&).
    *  @param stream The CUDA stream that is used to execute the operation.
    *
    * @return The number of elements removed.
@@ -2636,7 +2636,7 @@ class HashTable : public HashTableBase<K, V, S> {
    * type.
    * @param threshold The fourth user-defined argument to @p pred with
    * score_type type.
-   * @param offset The position of the key to remove.
+   * @param offset The position of the key to search.
    * @param keys The keys to dump from GPU-accessible memory with shape (n).
    * @param values The values to dump from GPU-accessible memory with shape
    * (n, DIM).
@@ -2736,14 +2736,18 @@ class HashTable : public HashTableBase<K, V, S> {
   }
 
   /**
-   * @brief Exports a certain number of the key-value-score tuples which match
-   * @tparam PredFunctor
+   * @brief Exports a certain number of key-value-score tuples that match a
+   * given predicate.
    *
-   * @param pred A functor with template <K, V, S> defined an operator with
-   * signature:  __device__ (bool*)(const K&, const V*, const S&, const
-   * cg::tiled_partition<GroupSize>&).
+   * @tparam PredFunctor A functor type with a template signature `<K, V, S>`.
+   * It should define an operator with the signature:
+   * `__device__ bool operator()(const K&, const V*, const S&,
+   * cg::thread_block_tile<GroupSize>&)`.
+   *
+   * @param pred A functor of type `PredFunctor` that defines the predicate for
+   * filtering tuples.
    * @param n The maximum number of exported pairs.
-   * @param offset The position of the key to remove.
+   * @param offset The position of the key to search.
    * @param d_counter The number of elements dumped which is on device.
    * @param keys The keys to dump from GPU-accessible memory with shape (n).
    * @param values The values to dump from GPU-accessible memory with shape (n,
@@ -2757,9 +2761,6 @@ class HashTable : public HashTableBase<K, V, S> {
    *
    * @return void
    *
-   * @throw CudaException If the key-value size is too large for GPU shared
-   * memory. Reducing the value for @p n is currently required if this exception
-   * occurs.
    */
 
   template <typename PredFunctor>
@@ -2798,6 +2799,63 @@ class HashTable : public HashTableBase<K, V, S> {
     kernel<<<grid_size, block_size, 0, stream>>>(
         n, offset, pred, table_->buckets, table_->bucket_max_size, dim, keys,
         values, scores, d_counter);
+
+    CudaCheckError();
+  }
+
+  /**
+   * @brief Applies the given function to items in the range [first, last) in
+   * the table.
+   *
+   * @tparam ExecutionFunc A functor type with a template signature `<K, V, S>`.
+   * It should define an operator with the signature:
+   * `__device__ void operator()(const K&, V*, S*,
+   * cg::thread_block_tile<GroupSize>&)`.
+   *
+   * @param first The first element to which the function object will be
+   * applied.
+   * @param last The last element(excluding) to which the function object will
+   * be applied.
+   * @param f A functor of type `ExecutionFunc` that defines the predicate for
+   * filtering tuples. signature:  __device__ (bool*)(const K&, const V*, const
+   * S&, const cg::tiled_partition<GroupSize>&).
+   * @param stream The CUDA stream that is used to execute the operation.
+   *
+   * @return void
+   *
+   */
+
+  template <typename ExecutionFunc>
+  void for_each(const size_type first, const size_type last, ExecutionFunc& f,
+                cudaStream_t stream = 0) {
+    update_read_lock lock(mutex_, stream);
+
+    if (first >= table_->capacity or last > table_->capacity or first >= last) {
+      return;
+    }
+    uint64_t n = last - first;
+
+    /// Search_length should be multiple of GroupSize for communication.
+    uint64_t dim = table_->dim;
+    auto kernel = [&] {
+      if (dim >= 32 && n % 32 == 0) {
+        return traverse_kernel<key_type, value_type, score_type, ExecutionFunc,
+                               32>;
+      } else if (dim >= 16 && n % 16 == 0) {
+        return traverse_kernel<key_type, value_type, score_type, ExecutionFunc,
+                               16>;
+      } else if (dim >= 8 && n % 8 == 0) {
+        return traverse_kernel<key_type, value_type, score_type, ExecutionFunc,
+                               8>;
+      }
+      return traverse_kernel<key_type, value_type, score_type, ExecutionFunc,
+                             1>;
+    }();
+    uint64_t block_size = 128UL;
+    uint64_t grid_size = std::min(sm_cnt_ * max_threads_per_block_ / block_size,
+                                  SAFE_GET_GRID_SIZE(n, block_size));
+    kernel<<<grid_size, block_size, 0, stream>>>(n, first, f, table_->buckets,
+                                                 table_->bucket_max_size, dim);
 
     CudaCheckError();
   }
