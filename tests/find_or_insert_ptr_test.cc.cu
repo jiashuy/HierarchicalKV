@@ -56,6 +56,22 @@ struct ExportIfPredFunctor {
   }
 };
 
+template <class K, class S>
+struct EvictedObjectProcessor {
+  __forceinline__ __device__ void operator()(const K& key, const S& score) {
+    uint64_t offset = atomicAdd(evict_counter, 1);
+    if (evicted_keys != nullptr) {
+      evicted_keys[offset] = key;
+    }
+    if (evicted_scores != nullptr) {
+      evicted_scores[offset] = score;
+    }
+  }
+  uint64_t* evict_counter = nullptr;
+  K* evicted_keys = nullptr;
+  S* evicted_scores = nullptr;
+};
+
 void test_basic(size_t max_hbm_for_vectors, int key_start = 0) {
   constexpr uint64_t INIT_CAPACITY = 64 * 1024 * 1024UL;
   constexpr uint64_t MAX_CAPACITY = INIT_CAPACITY;
@@ -445,6 +461,159 @@ void test_basic_when_full(size_t max_hbm_for_vectors, int key_start = 0) {
     CUDA_CHECK(cudaStreamSynchronize(stream));
     ASSERT_EQ(total_size_after_insert, total_size_after_reinsert);
   }
+  CUDA_CHECK(cudaStreamDestroy(stream));
+
+  CUDA_CHECK(cudaMemcpy(h_vectors, d_vectors, KEY_NUM * sizeof(V) * options.dim,
+                        cudaMemcpyDeviceToHost));
+
+  CUDA_CHECK(cudaFreeHost(h_keys));
+  CUDA_CHECK(cudaFreeHost(h_scores));
+  CUDA_CHECK(cudaFreeHost(h_found));
+
+  CUDA_CHECK(cudaFree(d_keys));
+  CUDA_CHECK(cudaFree(d_scores));
+  CUDA_CHECK(cudaFree(d_vectors));
+  CUDA_CHECK(cudaFree(d_def_val));
+  CUDA_CHECK(cudaFree(d_vectors_ptr));
+  CUDA_CHECK(cudaFree(d_found));
+  CUDA_CHECK(cudaDeviceSynchronize());
+
+  CudaCheckError();
+}
+
+void test_basic_when_full_with_evict(size_t max_hbm_for_vectors,
+                                     int key_start = 0) {
+  constexpr uint64_t INIT_CAPACITY = 1 * 1024 * 1024UL;
+  constexpr uint64_t MAX_CAPACITY = INIT_CAPACITY;
+  constexpr uint64_t KEY_NUM = 256 * 1024UL;
+  constexpr uint64_t STEP = 8;
+
+  K* h_keys;
+  S* h_scores;
+  V* h_vectors;
+  bool* h_found;
+
+  TableOptions options;
+
+  options.reserved_key_start_bit = key_start;
+  options.init_capacity = INIT_CAPACITY;
+  options.max_capacity = MAX_CAPACITY;
+  options.dim = DIM;
+  options.max_hbm_for_vectors = nv::merlin::GB(max_hbm_for_vectors);
+  using Table = nv::merlin::HashTable<K, V, S, EvictStrategy::kCustomized>;
+
+  CUDA_CHECK(cudaMallocHost(&h_keys, KEY_NUM * sizeof(K)));
+  CUDA_CHECK(cudaMallocHost(&h_scores, KEY_NUM * sizeof(S)));
+  CUDA_CHECK(cudaMallocHost(&h_vectors, KEY_NUM * sizeof(V) * options.dim));
+  CUDA_CHECK(cudaMallocHost(&h_found, KEY_NUM * sizeof(bool)));
+
+  CUDA_CHECK(cudaMemset(h_vectors, 0, KEY_NUM * sizeof(V) * options.dim));
+
+  K* d_keys;
+  S* d_scores = nullptr;
+  V* d_vectors;
+  V* d_def_val;
+  V** d_vectors_ptr;
+  bool* d_found;
+  uint64_t* evict_counter;
+
+  CUDA_CHECK(cudaMalloc(&d_keys, KEY_NUM * sizeof(K)));
+  CUDA_CHECK(cudaMalloc(&d_scores, KEY_NUM * sizeof(S)));
+  CUDA_CHECK(cudaMalloc(&d_vectors, KEY_NUM * sizeof(V) * options.dim));
+  CUDA_CHECK(cudaMalloc(&d_def_val, KEY_NUM * sizeof(V) * options.dim));
+  CUDA_CHECK(cudaMalloc(&d_vectors_ptr, KEY_NUM * sizeof(V*)));
+  CUDA_CHECK(cudaMalloc(&d_found, KEY_NUM * sizeof(bool)));
+  CUDA_CHECK(cudaMalloc(&evict_counter, sizeof(uint64_t)));
+
+  CUDA_CHECK(cudaMemset(d_vectors, 1, KEY_NUM * sizeof(V) * options.dim));
+  CUDA_CHECK(cudaMemset(d_def_val, 2, KEY_NUM * sizeof(V) * options.dim));
+  CUDA_CHECK(cudaMemset(d_vectors_ptr, 0, KEY_NUM * sizeof(V*)));
+  CUDA_CHECK(cudaMemset(d_found, 0, KEY_NUM * sizeof(bool)));
+
+  cudaStream_t stream;
+  CUDA_CHECK(cudaStreamCreate(&stream));
+
+  std::unique_ptr<Table> table = std::make_unique<Table>();
+  table->init(options);
+  uint64_t total_size = 0;
+  K start_key = 0;
+  for (int i = 0; i < STEP; i++) {
+    test_util::create_continuous_keys<K, S, V, DIM>(h_keys, h_scores, nullptr,
+                                                    KEY_NUM, start_key);
+    start_key += KEY_NUM;
+
+    CUDA_CHECK(cudaMemcpy(d_keys, h_keys, KEY_NUM * sizeof(K),
+                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_scores, h_scores, KEY_NUM * sizeof(S),
+                          cudaMemcpyHostToDevice));
+    total_size = table->size(stream);
+    {
+      V** d_vectors_ptr = nullptr;
+      bool* d_found;
+      CUDA_CHECK(cudaMalloc(&d_found, KEY_NUM * sizeof(bool)));
+      CUDA_CHECK(cudaMalloc(&d_vectors_ptr, KEY_NUM * sizeof(V*)));
+      test_util::array2ptr(d_vectors_ptr, d_vectors, options.dim, KEY_NUM,
+                           stream);
+      EvictedObjectProcessor<K, S> processor;
+      processor.evict_counter = evict_counter;
+      CUDA_CHECK(cudaMemset(evict_counter, 0, sizeof(uint64_t)));
+      table->template find_or_insert_v2<EvictedObjectProcessor<K, S>>(
+          processor, KEY_NUM, d_keys, d_vectors_ptr, d_found, d_scores, stream);
+      test_util::read_or_write_ptr(d_vectors_ptr, d_vectors, d_found,
+                                   options.dim, KEY_NUM, stream);
+      CUDA_CHECK(cudaStreamSynchronize(stream));
+      CUDA_CHECK(cudaFree(d_vectors_ptr));
+      CUDA_CHECK(cudaFree(d_found));
+    }
+
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+
+    uint64_t total_size_after_insert = table->size(stream);
+    uint64_t h_evict_counter = 0;
+    CUDA_CHECK(cudaMemcpy(&h_evict_counter, evict_counter, sizeof(uint64_t),
+                          cudaMemcpyDeviceToHost));
+    std::cout << "new size=" << total_size_after_insert << "; "
+              << "evict number=" << h_evict_counter << "; "
+              << "old size=" << total_size << "; "
+              << "current batch=" << KEY_NUM << "\n";
+    ASSERT_EQ(h_evict_counter + total_size_after_insert, total_size + KEY_NUM);
+
+    table->erase(KEY_NUM, d_keys, stream);
+    size_t total_size_after_erase = table->size(stream);
+
+    {
+      V** d_vectors_ptr = nullptr;
+      bool* d_found;
+      CUDA_CHECK(cudaMalloc(&d_found, KEY_NUM * sizeof(bool)));
+      CUDA_CHECK(cudaMalloc(&d_vectors_ptr, KEY_NUM * sizeof(V*)));
+      test_util::array2ptr(d_vectors_ptr, d_vectors, options.dim, KEY_NUM,
+                           stream);
+      EvictedObjectProcessor<K, S> processor;
+      processor.evict_counter = evict_counter;
+      CUDA_CHECK(cudaMemset(evict_counter, 0, sizeof(uint64_t)));
+      table->template find_or_insert_v2<EvictedObjectProcessor<K, S>>(
+          processor, KEY_NUM, d_keys, d_vectors_ptr, d_found, d_scores, stream);
+      test_util::read_or_write_ptr(d_vectors_ptr, d_vectors, d_found,
+                                   options.dim, KEY_NUM, stream);
+      CUDA_CHECK(cudaStreamSynchronize(stream));
+      CUDA_CHECK(cudaFree(d_vectors_ptr));
+      CUDA_CHECK(cudaFree(d_found));
+    }
+
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+
+    uint64_t total_size_after_reinsert = table->size(stream);
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    CUDA_CHECK(cudaMemcpy(&h_evict_counter, evict_counter, sizeof(uint64_t),
+                          cudaMemcpyDeviceToHost));
+    std::cout << "new size=" << total_size_after_reinsert << "; "
+              << "evict number=" << h_evict_counter << "; "
+              << "old size=" << total_size_after_erase << "; "
+              << "current batch=" << KEY_NUM << "\n";
+    ASSERT_EQ(h_evict_counter + total_size_after_reinsert,
+              total_size_after_erase + KEY_NUM);
+  }
+  std::cout << "-----------------------------------------------\n";
   CUDA_CHECK(cudaStreamDestroy(stream));
 
   CUDA_CHECK(cudaMemcpy(h_vectors, d_vectors, KEY_NUM * sizeof(V) * options.dim,
@@ -3564,6 +3733,10 @@ TEST(FindOrInsertPtrTest, test_basic) {
 TEST(FindOrInsertPtrTest, test_basic_when_full) {
   test_basic_when_full(16, 4);
   test_basic_when_full(0);
+}
+TEST(FindOrInsertPtrTest, test_basic_when_full_with_evict) {
+  test_basic_when_full_with_evict(16, 4);
+  test_basic_when_full_with_evict(0);
 }
 TEST(FindOrInsertPtrTest, test_erase_if_pred) {
   test_erase_if_pred(16);

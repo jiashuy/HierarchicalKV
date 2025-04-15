@@ -1732,6 +1732,86 @@ class HashTable : public HashTableBase<K, V, S> {
   }
 
   /**
+   * @brief Searches the hash table for the specified keys and returns address
+   * of the values. When a key is missing, the value in @p values and @p scores
+   * will be inserted.
+   *
+   * @warning This API returns internal addresses for high-performance but
+   * thread-unsafe. The caller is responsible for guaranteeing data consistency.
+   *
+   * @param processor A functor of type `EvictedObjectProcessor` that defines
+   * the logic for dealing with evicted key and score. signature:  __device__
+   * (void*)(const K&, const S&).
+   * @param n The number of key-value-score tuples to search or insert.
+   * @param keys The keys to search on GPU-accessible memory with shape (n).
+   * @param values  The addresses of values to search on GPU-accessible memory
+   * with shape (n).
+   * @param founds The status that indicates if the keys are found on
+   * @param scores The scores to search on GPU-accessible memory with shape (n).
+   * @parblock
+   * If @p scores is `nullptr`, the score for each key will not be returned.
+   * @endparblock
+   * @param stream The CUDA stream that is used to execute the operation.
+   * @param unique_key If all keys in the same batch are unique.
+   * @param ignore_evict_strategy A boolean option indicating whether if
+   * the find_or_insert_v2 ignores the evict strategy of table with current
+   * scores anyway. If true, it does not check whether the scores confroms to
+   * the evict strategy. If false, it requires the scores follow the evict
+   * strategy of table.
+   */
+  template <typename EvictedObjectProcessor>
+  void find_or_insert_v2(EvictedObjectProcessor processor, const size_type n,
+                         const key_type* keys,          // (n)
+                         value_type** values,           // (n)
+                         bool* founds,                  // (n)
+                         score_type* scores = nullptr,  // (n)
+                         cudaStream_t stream = 0, bool unique_key = true,
+                         bool ignore_evict_strategy = false) {
+    if (n == 0) {
+      return;
+    }
+
+    while (!reach_max_capacity_ &&
+           fast_load_factor(n, stream) > options_.max_load_factor) {
+      reserve(capacity() * 2, stream);
+    }
+
+    if (!ignore_evict_strategy) {
+      check_evict_strategy(scores);
+    }
+
+    insert_unique_lock lock(mutex_, stream);
+
+    constexpr uint32_t MinBucketCapacityFilter = sizeof(VecD_Load) / sizeof(D);
+
+    if (unique_key && options_.max_bucket_size % MinBucketCapacityFilter == 0) {
+      constexpr uint32_t BLOCK_SIZE = 128U;
+
+      const size_type dev_ws_size{n * sizeof(key_type**)};
+      auto dev_ws{dev_mem_pool_->get_workspace<1>(dev_ws_size, stream)};
+      auto keys_ptr{dev_ws.get<key_type**>(0)};
+      CUDA_CHECK(cudaMemsetAsync(keys_ptr, 0, dev_ws_size, stream));
+
+      find_or_insert_ptr_kernel_lock_key_v2<key_type, value_type, score_type,
+                                            BLOCK_SIZE, evict_strategy,
+                                            EvictedObjectProcessor>
+          <<<(n + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+              processor, table_->buckets, table_->buckets_size,
+              table_->buckets_num, options_.max_bucket_size, options_.dim, keys,
+              values, scores, keys_ptr, n, founds, global_epoch_);
+
+      find_or_insert_ptr_kernel_unlock_key<key_type>
+          <<<(n + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(
+              keys, keys_ptr, n);
+    } else {
+      throw std::invalid_argument(
+          "unique_key should be true and max_bucket_size should be larger.");
+    }
+
+    CudaCheckError();
+  }
+
+  /**
    * @brief Using pointers to address the keys in the hash table and set them
    * to target keys.
    * This function will unlock the keys in the table which are locked by
