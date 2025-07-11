@@ -1233,9 +1233,10 @@ class HashTable : public HashTableBase<K, V, S> {
     insert_unique_lock lock(mutex_, stream);
 
     // TODO: Currently only need eviction when using HashTable as HBM cache.
-    if (!is_fast_mode()) {
-      throw std::runtime_error("Only allow insert_and_evict in pure HBM mode.");
-    }
+    ///TODO: add more utest
+    // if (!is_fast_mode()) {
+    //   throw std::runtime_error("Only allow insert_and_evict in pure HBM mode.");
+    // }
 
     static thread_local int step_counter = 0;
     static thread_local float load_factor = 0.0;
