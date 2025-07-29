@@ -118,6 +118,7 @@ add_executable(assign_score_dead_lock tests/assign_score_dead_lock.cc.cu)
 target_compile_features(assign_score_dead_lock PUBLIC cxx_std_14)
 set_target_properties(assign_score_dead_lock PROPERTIES  CUDA_ARCHITECTURES OFF)
 TARGET_LINK_LIBRARIES(assign_score_dead_lock gtest_main)
+target_compile_options(assign_score_dead_lock PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>)
 
 set(CMAKE_BUILD_TYPE "Debug")
 add_executable(save_and_load_test tests/save_and_load_test.cc.cu)

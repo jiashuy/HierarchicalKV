@@ -1,0 +1,1 @@
+ncu -f --target-processes all --export hkv_debug-rep.report --section SchedulerStats --section WarpStateStats --import-source=yes --page raw --set full  -k regex:"warp_atomic_cas_kernel" ./assign_score_dead_lock

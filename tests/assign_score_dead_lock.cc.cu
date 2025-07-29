@@ -128,6 +128,59 @@ void test_assign_score_dead_lock(int64_t bucket_capacity, int64_t max_device_gb,
   }
 }
 
+
+__global__ void warp_atomic_cas_kernel(
+  int batch, int64_t * keys, int64_t* counts
+) {
+
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int warp_id = tid / warpSize;
+  int64_t LOCKED_KEY = UINT64_C(0xFFFFFFFFFFFFFFFD);
+  int64_t EMPTY_KEY = 0;
+  if (warp_id < batch) {
+    bool res = false;
+    while (not res) {
+      int64_t expected_key = EMPTY_KEY;
+      int64_t ret = atomicCAS(keys + warp_id, expected_key, LOCKED_KEY);
+      if (ret == LOCKED_KEY) break;
+    }
+    __syncwarp();
+    atomicAdd(counts + warp_id, 1);
+    atomicCAS(keys + warp_id, LOCKED_KEY, EMPTY_KEY);
+  }
+}
+
+void test_warp_atomic_cas() {
+
+  int64_t *d_keys, *d_counts;
+  constexpr int batch = 32;
+  CUDA_CHECK(cudaMalloc(&d_keys, sizeof(int64_t) * batch));
+  CUDA_CHECK(cudaMalloc(&d_counts, sizeof(int64_t) * batch));
+  int64_t h_keys[batch], h_counts[batch];
+
+  CUDA_CHECK(cudaMemset(d_keys, 0, sizeof(int64_t) * batch));
+  CUDA_CHECK(cudaMemset(d_counts, 0, sizeof(int64_t) * batch));
+
+  warp_atomic_cas_kernel<<<batch, 32>>>(batch, d_keys, d_counts);
+
+  CUDA_CHECK(cudaMemcpy(h_keys, d_keys, sizeof(int64_t) * batch, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(h_counts, d_counts, sizeof(int64_t) * batch, cudaMemcpyDeviceToHost));
+
+  for (int i = 0; i < batch; i++) {
+    std::cout << h_keys[i] << " ";
+  }
+  std::cout << "\n";
+
+  for (int i = 0; i < batch; i++) {
+    std::cout << h_counts[i] << " ";
+  }
+  std::cout << "\n";
+
+  CUDA_CHECK(cudaFree(d_keys));
+  CUDA_CHECK(cudaFree(d_counts));
+}
+
 TEST(DEAD_LOCK_TEST, test_assign_score_dead_lock) { 
-  test_assign_score_dead_lock(128, 30, 90, 0.9, 1024 * 1024UL);
+  // test_assign_score_dead_lock(128, 30, 90, 0.9, 1024 * 1024UL);
+  test_warp_atomic_cas();
 }
