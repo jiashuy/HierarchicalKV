@@ -3374,6 +3374,7 @@ class HashTable : public HashTableBase<K, V, S> {
   }
 
   void set_global_epoch(const uint64_t epoch) { global_epoch_ = epoch; }
+  inline bool is_fast_mode() const noexcept { return table_->is_pure_hbm; }
 
  private:
   bool is_power(size_t base, size_t n) {
@@ -3390,7 +3391,6 @@ class HashTable : public HashTableBase<K, V, S> {
   }
 
  private:
-  inline bool is_fast_mode() const noexcept { return table_->is_pure_hbm; }
 
   /**
    * @brief Returns the load factor by sampling up to 1024 buckets.

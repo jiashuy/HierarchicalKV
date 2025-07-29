@@ -114,6 +114,11 @@ target_compile_features(merlin_memory_pool_test PUBLIC cxx_std_14)
 set_target_properties(merlin_memory_pool_test PROPERTIES  CUDA_ARCHITECTURES OFF)
 TARGET_LINK_LIBRARIES(merlin_memory_pool_test gtest_main)
 
+add_executable(assign_score_dead_lock tests/assign_score_dead_lock.cc.cu)
+target_compile_features(assign_score_dead_lock PUBLIC cxx_std_14)
+set_target_properties(assign_score_dead_lock PROPERTIES  CUDA_ARCHITECTURES OFF)
+TARGET_LINK_LIBRARIES(assign_score_dead_lock gtest_main)
+
 set(CMAKE_BUILD_TYPE "Debug")
 add_executable(save_and_load_test tests/save_and_load_test.cc.cu)
 target_compile_features(save_and_load_test PUBLIC cxx_std_14)

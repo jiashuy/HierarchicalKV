@@ -594,7 +594,8 @@ struct SelectUpdateScoreKernel {
                              const Table<K, V, S>* __restrict table,
                              Bucket<K, V, S>* buckets, const K* __restrict keys,
                              const S* __restrict scores, const S global_epoch) {
-    if (load_factor <= 0.75) {
+    if (true or load_factor <= 0.75) {
+      std::cout << "update score kernel tile=4\n";
       const unsigned int tile_size = 4;
       const size_t N = n * tile_size;
       const size_t grid_size = SAFE_GET_GRID_SIZE(N, block_size);
