@@ -224,3 +224,15 @@ add_executable(concurrency_benchmark benchmark/concurrency_benchmark.cc.cu)
 target_compile_features(concurrency_benchmark PUBLIC cxx_std_14)
 set_target_properties(concurrency_benchmark PROPERTIES CUDA_ARCHITECTURES OFF)
 target_link_libraries(concurrency_benchmark pthread)
+
+add_executable(e8_hkv_baseline benchmark/e8_hkv_baseline.cc.cu)
+target_compile_features(e8_hkv_baseline PUBLIC cxx_std_14)
+set_target_properties(e8_hkv_baseline PROPERTIES CUDA_ARCHITECTURES OFF)
+
+add_executable(e9_eviction_comparison benchmark/e9_eviction_comparison.cc.cu)
+target_compile_features(e9_eviction_comparison PUBLIC cxx_std_14)
+set_target_properties(e9_eviction_comparison PROPERTIES CUDA_ARCHITECTURES OFF)
+
+add_executable(e10_dual_bucket_analysis benchmark/e10_dual_bucket_analysis.cc.cu)
+target_compile_features(e10_dual_bucket_analysis PUBLIC cxx_std_14)
+set_target_properties(e10_dual_bucket_analysis PROPERTIES CUDA_ARCHITECTURES OFF)
