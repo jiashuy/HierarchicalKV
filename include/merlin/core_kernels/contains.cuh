@@ -78,7 +78,11 @@ __global__ void contains_kernel_pipeline(Bucket<K, V, S>* buckets,
     K target_key = keys[key_idx_base + rank];
     sm_target_keys[idx_block] = target_key;
     const K hashed_key = Murmur3HashDevice(target_key);
+#ifdef DISABLE_DIGEST
+    const uint8_t target_digest = static_cast<uint8_t>(0x01);
+#else
     const uint8_t target_digest = static_cast<uint8_t>(hashed_key >> 32);
+#endif
     sm_target_digests[idx_block] = static_cast<uint32_t>(target_digest);
     int global_idx = hashed_key % (buckets_num * BUCKET_SIZE);
     int bkt_idx = global_idx / BUCKET_SIZE;

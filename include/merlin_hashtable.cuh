@@ -2059,10 +2059,19 @@ class HashTable : public HashTableBase<K, V, S> {
 
     check_evict_strategy(scores);
 
+#ifdef USE_RW_LOCK
+    // Ablation: assign takes exclusive (insert_unique) lock, simulating
+    // a conventional R/W lock where updates are treated as writes.
+    std::unique_ptr<insert_unique_lock> lock_ptr;
+    if (options_.api_lock) {
+      lock_ptr = std::make_unique<insert_unique_lock>(mutex_, stream);
+    }
+#else
     std::unique_ptr<update_shared_lock> lock_ptr;
     if (options_.api_lock) {
       lock_ptr = std::make_unique<update_shared_lock>(mutex_, stream);
     }
+#endif
 
     if (is_fast_mode()) {
       static thread_local int step_counter = 0;
@@ -2219,10 +2228,17 @@ class HashTable : public HashTableBase<K, V, S> {
     check_evict_strategy(scores);
 
     {
+#ifdef USE_RW_LOCK
+      std::unique_ptr<insert_unique_lock> lock_ptr;
+      if (options_.api_lock) {
+        lock_ptr = std::make_unique<insert_unique_lock>(mutex_, stream);
+      }
+#else
       std::unique_ptr<update_shared_lock> lock_ptr;
       if (options_.api_lock) {
         lock_ptr = std::make_unique<update_shared_lock>(mutex_, stream);
       }
+#endif
       static thread_local int step_counter = 0;
       static thread_local float load_factor = 0.0;
 
@@ -2287,10 +2303,17 @@ class HashTable : public HashTableBase<K, V, S> {
       return;
     }
 
+#ifdef USE_RW_LOCK
+    std::unique_ptr<insert_unique_lock> lock_ptr;
+    if (options_.api_lock) {
+      lock_ptr = std::make_unique<insert_unique_lock>(mutex_, stream);
+    }
+#else
     std::unique_ptr<update_shared_lock> lock_ptr;
     if (options_.api_lock) {
       lock_ptr = std::make_unique<update_shared_lock>(mutex_, stream);
     }
+#endif
 
     if (is_fast_mode()) {
       static thread_local int step_counter = 0;

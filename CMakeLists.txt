@@ -26,6 +26,14 @@ set(CMAKE_CUDA_STANDARD 17)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
 option(CLANGFORMAT "Clangformat code files before compiling" OFF)
+option(DISABLE_DIGEST "Disable digest filtering for ablation" OFF)
+if(DISABLE_DIGEST)
+  add_definitions(-DDISABLE_DIGEST)
+endif()
+option(USE_RW_LOCK "Use R/W lock instead of triple-group for ablation" OFF)
+if(USE_RW_LOCK)
+  add_definitions(-DUSE_RW_LOCK)
+endif()
 if(CLANGFORMAT)
   include(ClangFormat)
   file(GLOB_RECURSE clangformat_includes
@@ -191,3 +199,28 @@ TARGET_LINK_LIBRARIES(dual_bucket_test gtest_main)
 add_executable(dual_bucket_benchmark benchmark/dual_bucket_benchmark.cc.cu)
 target_compile_features(dual_bucket_benchmark PUBLIC cxx_std_14)
 set_target_properties(dual_bucket_benchmark PROPERTIES  CUDA_ARCHITECTURES OFF)
+
+add_executable(batch_size_benchmark benchmark/batch_size_benchmark.cc.cu)
+target_compile_features(batch_size_benchmark PUBLIC cxx_std_14)
+set_target_properties(batch_size_benchmark PROPERTIES  CUDA_ARCHITECTURES OFF)
+
+add_executable(error_bars_benchmark benchmark/error_bars_benchmark.cc.cu)
+target_compile_features(error_bars_benchmark PUBLIC cxx_std_14)
+set_target_properties(error_bars_benchmark PROPERTIES  CUDA_ARCHITECTURES OFF)
+
+add_executable(latency_benchmark benchmark/latency_benchmark.cc.cu)
+target_compile_features(latency_benchmark PUBLIC cxx_std_14)
+set_target_properties(latency_benchmark PROPERTIES  CUDA_ARCHITECTURES OFF)
+
+add_executable(score_strategy_benchmark benchmark/score_strategy_benchmark.cc.cu)
+target_compile_features(score_strategy_benchmark PUBLIC cxx_std_14)
+set_target_properties(score_strategy_benchmark PROPERTIES  CUDA_ARCHITECTURES OFF)
+
+add_executable(digest_ablation_benchmark benchmark/digest_ablation_benchmark.cc.cu)
+target_compile_features(digest_ablation_benchmark PUBLIC cxx_std_14)
+set_target_properties(digest_ablation_benchmark PROPERTIES  CUDA_ARCHITECTURES OFF)
+
+add_executable(concurrency_benchmark benchmark/concurrency_benchmark.cc.cu)
+target_compile_features(concurrency_benchmark PUBLIC cxx_std_14)
+set_target_properties(concurrency_benchmark PROPERTIES CUDA_ARCHITECTURES OFF)
+target_link_libraries(concurrency_benchmark pthread)
