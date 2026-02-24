@@ -213,7 +213,7 @@ int main() {
 
   std::cout << "library,operation,load_factor,run,throughput_bkvs" << std::endl;
 
-  std::vector<float> load_factors = {0.50f, 0.75f};
+  std::vector<float> load_factors = {0.10f, 0.25f, 0.50f, 0.75f, 0.80f, 0.90f};
   for (float lf : load_factors) {
     std::cerr << "--- LF=" << std::fixed << std::setprecision(2) << lf
               << " ---" << std::endl;

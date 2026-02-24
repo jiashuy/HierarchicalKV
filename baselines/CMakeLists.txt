@@ -73,6 +73,16 @@ set_target_properties(bght_bench PROPERTIES
   CUDA_SEPARABLE_COMPILATION ON
 )
 
+# ─── P2BHT benchmark (uses BGHT library, p2bht variant) ───
+add_executable(p2bht_bench p2bht_bench.cu)
+target_include_directories(p2bht_bench PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${bght_SOURCE_DIR}/include
+)
+set_target_properties(p2bht_bench PROPERTIES
+  CUDA_SEPARABLE_COMPILATION ON
+)
+
 # ─── cuCollections benchmark ───
 message(STATUS "Fetching cuCollections ...")
 FetchContent_MakeAvailable(cuco)

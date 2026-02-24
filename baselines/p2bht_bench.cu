@@ -1,16 +1,17 @@
 /*
- * E8: BGHT Baseline Benchmark
+ * E18: P2BHT (Power-of-Two-Choices Bucketed Hash Table) Baseline Benchmark
  *
- * BGHT stores (key -> index) pairs; actual values live in a separate
- * flat array.  Insert = table.insert + scatter_values; Find = table.find +
- * gather_values.  Both phases are timed end-to-end.
+ * P2BHT is from the BGHT library (owensgroup/BGHT), using bght::p2bht.
+ * Same indirection pattern as BGHT/BCHT: stores (key -> index) pairs;
+ * actual values live in a separate flat array.
+ * Insert = table.insert + scatter_values; Find = table.find + gather_values.
  *
  * Sentinel: key = ~0ULL, value = ~0ULL
  *
  * Output: CSV  library,operation,load_factor,run,throughput_bkvs
  */
 
-#include <bght/bcht.hpp>
+#include <bght/p2bht.hpp>
 
 #include <algorithm>
 #include <cstdint>
@@ -21,7 +22,7 @@
 
 #include "common.cuh"
 
-/* ─── Types ─── */
+/* --- Types --- */
 
 using key_type = uint64_t;
 using index_type = uint64_t;
@@ -30,7 +31,7 @@ using pair_type = bght::pair<key_type, index_type>;
 static constexpr key_type SENTINEL_KEY = ~0ULL;
 static constexpr index_type SENTINEL_VAL = ~0ULL;
 
-/* ─── Key / Value Generation ─── */
+/* --- Key / Value Generation --- */
 
 static void generate_sequential_keys(std::vector<key_type>& keys, size_t n,
                                      key_type start = 1) {
@@ -50,7 +51,7 @@ static void generate_random_float_values(std::vector<float>& vals, size_t n,
   }
 }
 
-/* ─── Build Pairs: (key_i, index_i) ─── */
+/* --- Build Pairs: (key_i, index_i) --- */
 
 static void build_pairs(std::vector<pair_type>& pairs,
                         const std::vector<key_type>& keys, size_t offset) {
@@ -60,14 +61,14 @@ static void build_pairs(std::vector<pair_type>& pairs,
   }
 }
 
-/* ─── Benchmark ─── */
+/* --- Benchmark --- */
 
-void run_bght(float target_lf) {
+void run_p2bht(float target_lf) {
   const size_t target_n = static_cast<size_t>(CAPACITY * target_lf);
   const size_t table_capacity = static_cast<size_t>(
       std::ceil(static_cast<double>(target_n) / target_lf));
 
-  std::cerr << "BGHT LF=" << std::fixed << std::setprecision(2) << target_lf
+  std::cerr << "P2BHT LF=" << std::fixed << std::setprecision(2) << target_lf
             << " target_n=" << target_n << " table_cap=" << table_capacity
             << std::endl;
 
@@ -103,18 +104,15 @@ void run_bght(float target_lf) {
   }
 
   // Allocate device memory
-  // Flat value array: CAPACITY * DIM floats
   float* d_values = nullptr;
   CUDA_CHECK(cudaMalloc(&d_values, CAPACITY * DIM * sizeof(float)));
 
-  // Prefill pairs
   pair_type* d_prefill_pairs = nullptr;
   CUDA_CHECK(cudaMalloc(&d_prefill_pairs, prefill_n * sizeof(pair_type)));
   CUDA_CHECK(cudaMemcpy(d_prefill_pairs, h_prefill_pairs.data(),
                          prefill_n * sizeof(pair_type),
                          cudaMemcpyHostToDevice));
 
-  // Prefill float values -> scatter into d_values
   float* d_prefill_floats = nullptr;
   uint64_t* d_prefill_indices = nullptr;
   CUDA_CHECK(cudaMalloc(&d_prefill_floats, prefill_n * DIM * sizeof(float)));
@@ -130,7 +128,6 @@ void run_bght(float target_lf) {
                            cudaMemcpyHostToDevice));
   }
 
-  // Batch pairs and float values
   pair_type* d_batch_pairs = nullptr;
   float* d_batch_floats = nullptr;
   uint64_t* d_batch_indices = nullptr;
@@ -148,7 +145,6 @@ void run_bght(float target_lf) {
                          BATCH_SIZE * sizeof(uint64_t),
                          cudaMemcpyHostToDevice));
 
-  // Query keys for find benchmark
   key_type* d_query_keys = nullptr;
   index_type* d_result_indices = nullptr;
   float* d_out = nullptr;
@@ -169,14 +165,12 @@ void run_bght(float target_lf) {
                          BATCH_SIZE * sizeof(key_type),
                          cudaMemcpyHostToDevice));
 
-  /* ─── INSERT Benchmark ─── */
+  /* --- INSERT Benchmark --- */
   for (int run = 0; run < WARMUP + RUNS; run++) {
-    // Create fresh table
-    bght::bcht<key_type, index_type> table(table_capacity, SENTINEL_KEY,
-                                           SENTINEL_VAL);
+    bght::p2bht<key_type, index_type> table(table_capacity, SENTINEL_KEY,
+                                            SENTINEL_VAL);
 
-    // Pre-fill: insert pairs + scatter values
-    // Insert in chunks to avoid exceeding BGHT limits
+    // Pre-fill
     {
       const size_t chunk = 4UL * 1024 * 1024;
       for (size_t off = 0; off < prefill_n; off += chunk) {
@@ -198,7 +192,7 @@ void run_bght(float target_lf) {
 
     if (run >= WARMUP) {
       double tp = throughput_bkvs(BATCH_SIZE, timer.elapsed_seconds());
-      std::cout << "BGHT,insert," << std::fixed << std::setprecision(2)
+      std::cout << "P2BHT,insert," << std::fixed << std::setprecision(2)
                 << target_lf << "," << (run - WARMUP + 1) << ","
                 << std::setprecision(6) << tp << std::endl;
       std::cerr << "  insert run " << (run - WARMUP + 1) << ": " << tp
@@ -206,11 +200,10 @@ void run_bght(float target_lf) {
     }
   }
 
-  /* ─── FIND Benchmark ─── */
+  /* --- FIND Benchmark --- */
   for (int run = 0; run < WARMUP + RUNS; run++) {
-    // Create and fully populate table
-    bght::bcht<key_type, index_type> table(table_capacity, SENTINEL_KEY,
-                                           SENTINEL_VAL);
+    bght::p2bht<key_type, index_type> table(table_capacity, SENTINEL_KEY,
+                                            SENTINEL_VAL);
     {
       const size_t chunk = 4UL * 1024 * 1024;
       pair_type* d_chunk_pairs = nullptr;
@@ -231,7 +224,6 @@ void run_bght(float target_lf) {
       }
       CUDA_CHECK(cudaFree(d_chunk_pairs));
 
-      // Scatter all values
       CUDA_CHECK(cudaMemcpy(d_values, h_all_float_vals.data(),
                              target_n * DIM * sizeof(float),
                              cudaMemcpyHostToDevice));
@@ -246,7 +238,7 @@ void run_bght(float target_lf) {
 
     if (run >= WARMUP) {
       double tp = throughput_bkvs(BATCH_SIZE, timer.elapsed_seconds());
-      std::cout << "BGHT,find," << std::fixed << std::setprecision(2)
+      std::cout << "P2BHT,find," << std::fixed << std::setprecision(2)
                 << target_lf << "," << (run - WARMUP + 1) << ","
                 << std::setprecision(6) << tp << std::endl;
       std::cerr << "  find run " << (run - WARMUP + 1) << ": " << tp
@@ -266,21 +258,22 @@ void run_bght(float target_lf) {
   CUDA_CHECK(cudaFree(d_out));
 }
 
-/* ─── Main ─── */
+/* --- Main --- */
 
 int main() {
   cudaDeviceProp props;
   CUDA_CHECK(cudaGetDeviceProperties(&props, 0));
   std::cerr << "GPU: " << props.name << std::endl;
-  std::cerr << "E8: BGHT Baseline (indirection, key->index)" << std::endl;
+  std::cerr << "E18: P2BHT Baseline (BGHT p2bht, indirection, key->index)"
+            << std::endl;
   std::cerr << "DIM=" << DIM << " CAPACITY=" << CAPACITY
             << " BATCH=" << BATCH_SIZE << std::endl;
 
   std::cout << "library,operation,load_factor,run,throughput_bkvs" << std::endl;
 
-  std::vector<float> load_factors = {0.10f, 0.25f, 0.50f, 0.75f, 0.80f, 0.90f};
+  std::vector<float> load_factors = {0.50f, 0.75f};
   for (float lf : load_factors) {
-    run_bght(lf);
+    run_p2bht(lf);
   }
 
   CUDA_CHECK(cudaDeviceSynchronize());

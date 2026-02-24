@@ -236,3 +236,7 @@ set_target_properties(e9_eviction_comparison PROPERTIES CUDA_ARCHITECTURES OFF)
 add_executable(e10_dual_bucket_analysis benchmark/e10_dual_bucket_analysis.cc.cu)
 target_compile_features(e10_dual_bucket_analysis PUBLIC cxx_std_14)
 set_target_properties(e10_dual_bucket_analysis PROPERTIES CUDA_ARCHITECTURES OFF)
+
+add_executable(e17_single_vs_dual benchmark/e17_single_vs_dual.cc.cu)
+target_compile_features(e17_single_vs_dual PUBLIC cxx_std_14)
+set_target_properties(e17_single_vs_dual PROPERTIES CUDA_ARCHITECTURES OFF)

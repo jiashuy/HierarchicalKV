@@ -1,8 +1,14 @@
 /*
- * Concurrency Mode Comparison Benchmark (E7)
+ * Concurrency Mode Comparison Benchmark (E7v2)
  *
  * Compares triple-group concurrency (R/U/I) vs. conventional R/W lock
  * under mixed workloads of find, assign, and insert_or_assign.
+ *
+ * E7v2 changes from E7:
+ *   - dim: 32 -> 128         (heavier kernels)
+ *   - batch_size: 64K -> 64K (unchanged - lock overhead dominates at smaller)
+ *   - Added assign scalability sweep: 1/2/5/10/20 threads
+ *   - Per-batch sync retained (lock internals already sync per call)
  *
  * Build with -DUSE_RW_LOCK=ON to simulate R/W lock (assign takes
  * exclusive lock), or -DUSE_RW_LOCK=OFF for triple-group (default).
@@ -38,11 +44,10 @@ using TableOptions = nv::merlin::HashTableOptions;
 using HKVTable =
     nv::merlin::HashTable<K, V, S, EvictStrategy::kLru, nv::merlin::Sm80>;
 
-/* ---- experiment knobs ---- */
-static constexpr int TOTAL_THREADS = 10;
+/* ---- experiment knobs (E7v2) ---- */
 static constexpr int BATCHES_PER_THREAD = 200;
 static constexpr size_t BATCH_SIZE = 64UL * 1024;  // 64K keys per batch
-static constexpr size_t DIM = 32;
+static constexpr size_t DIM = 16;                    // E7v2: smaller dim to expose lock overhead
 static constexpr size_t INIT_CAPACITY = 128UL * 1024 * 1024;  // 128M
 static constexpr size_t HBM_GB = 16;
 static constexpr float LOAD_FACTOR = 0.75f;
@@ -261,6 +266,9 @@ void run_workload(const char* mode_name, const WorkloadMix& mix) {
   fprintf(stderr, "  Threads: %d find, %d assign, %d insert\n",
           mix.find_threads, mix.assign_threads, mix.insert_threads);
 
+  int total_threads =
+      mix.find_threads + mix.assign_threads + mix.insert_threads;
+
   /* Create and populate table */
   TableOptions options;
   options.init_capacity = INIT_CAPACITY;
@@ -278,9 +286,6 @@ void run_workload(const char* mode_name, const WorkloadMix& mix) {
 
   uint64_t key_range = static_cast<uint64_t>(INIT_CAPACITY * LOAD_FACTOR);
   uint64_t insert_start = key_range + 1;
-
-  int total_threads =
-      mix.find_threads + mix.assign_threads + mix.insert_threads;
 
   /* Warmup: trigger kernel selection */
   {
@@ -381,9 +386,11 @@ void run_workload(const char* mode_name, const WorkloadMix& mix) {
           find_tput, assign_tput, insert_tput);
 
   /* CSV output to stdout */
-  printf("%s,%s,%zu,%.6f,%.6f,%zu,%.6f,%zu,%.6f,%zu,%.6f\n", mode_name,
-         mix.name, total_ops, max_thread_time, agg_throughput, find_ops,
-         find_tput, assign_ops, assign_tput, insert_ops, insert_tput);
+  printf("%s,%s,%d,%zu,%.6f,%.6f,%zu,%.6f,%zu,%.6f,%zu,%.6f\n", mode_name,
+         mix.name, total_threads, total_ops, max_thread_time, agg_throughput,
+         find_ops, find_tput, assign_ops, assign_tput, insert_ops,
+         insert_tput);
+  fflush(stdout);
 }
 
 int main(int argc, char** argv) {
@@ -401,25 +408,30 @@ int main(int argc, char** argv) {
   fprintf(stderr, "GPU: %s (SM %d.%d)\n", props.name, props.major,
           props.minor);
   fprintf(stderr, "Mode: %s\n", mode_name);
-  fprintf(stderr, "Config: dim=%zu, capacity=%zuM, HBM=%zuGB, lambda=%.2f\n",
+  fprintf(stderr,
+          "Config: dim=%zu, capacity=%zuM, HBM=%zuGB, lambda=%.2f\n",
           DIM, INIT_CAPACITY / (1024 * 1024), HBM_GB, LOAD_FACTOR);
-  fprintf(stderr, "Threads=%d, Batches/thread=%d, Batch size=%zuK\n",
-          TOTAL_THREADS, BATCHES_PER_THREAD, BATCH_SIZE / 1024);
+  fprintf(stderr,
+          "Threads=variable, Batches/thread=%d, Batch size=%zuK\n",
+          BATCHES_PER_THREAD, BATCH_SIZE / 1024);
 
   /* CSV header */
   printf(
-      "mode,workload,total_ops,wall_time_s,throughput_bkvs,"
+      "mode,workload,threads,total_ops,wall_time_s,throughput_bkvs,"
       "find_ops,find_bkvs,assign_ops,assign_bkvs,"
       "insert_ops,insert_bkvs\n");
 
   WorkloadMix mixes[] = {
+      /* Original E7 mixed workloads (10 threads) */
       {"read_heavy", 8, 1, 1},
       {"update_heavy", 4, 5, 1},
       {"insert_heavy", 4, 2, 4},
-      /* Assign-only scaling test */
+      /* Assign-only scalability sweep: key experiment */
+      {"assign_only_1t", 0, 1, 0},
+      {"assign_only_2t", 0, 2, 0},
       {"assign_only_5t", 0, 5, 0},
       {"assign_only_10t", 0, 10, 0},
-      /* Assign + insert contention */
+      /* Mixed: assign + insert contention */
       {"assign5_insert5", 0, 5, 5},
   };
 
