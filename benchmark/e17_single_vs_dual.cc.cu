@@ -7,15 +7,16 @@
  * Config B: dim=32, capacity=128M, Pure HBM (max_hbm_for_vectors=0),
  *           EvictStrategy::kCustomized, bucket_size=128
  *
- * Three measurements:
+ * Four measurements:
  *   Part 1: First-eviction load factor for BOTH modes
  *   Part 2: Steady-state cache hit ratio with Zipfian workload
  *   Part 3: insert_or_assign + find throughput at various load factors
+ *   Part 4: Top-K score retention (correctness under LF=1.0 steady state)
  *
  * Output: CSV to stdout, progress to stderr.
  * Usage: ./e17_single_vs_dual [part]
  *   part=0 (default): run all parts
- *   part=1/2/3: run specific part only
+ *   part=1/2/3/4: run specific part only
  */
 
 #include <algorithm>
@@ -421,6 +422,135 @@ void part3_throughput(const ModeConfig& mode, BenchBuffers& buf,
 }
 
 /* ================================================================
+ * Part 4: Top-K score retention (single vs dual)
+ *
+ * Measures "correctness" of eviction: after a Zipfian steady-state
+ * workload, what fraction of the ideal top-N (N=capacity) highest-
+ * scored keys are actually present in the table?
+ *
+ * Protocol:
+ *   1. Fill table to capacity with sequential keys, score = key.
+ *   2. Run 5× capacity Zipfian inserts with LRU scoring
+ *      (monotonically increasing global counter → recent keys score higher).
+ *   3. Track all inserted keys and their latest scores on the host side.
+ *   4. Export the table contents (keys + scores).
+ *   5. Compute the ideal top-N set from the host-side score map.
+ *   6. Report what fraction of ideal top-N are present in the table.
+ * ================================================================ */
+
+void part4_score_retention(const ModeConfig& mode, BenchBuffers& buf,
+                            cudaStream_t stream) {
+  std::cerr << "[Part4] mode=" << mode.name
+            << " score retention..." << std::flush;
+
+  auto table = create_table(mode.table_mode);
+
+  // --- Phase 1: Pre-populate to capacity with sequential keys ---
+  std::cerr << " populate..." << std::flush;
+  fill_sequential(*table, CAPACITY, buf, stream);
+
+  // Host-side score map: track the latest score for every key we've inserted
+  std::unordered_map<K, S> key_score_map;
+  key_score_map.reserve(CAPACITY * 6);  // expect ~5x capacity unique keys
+  for (size_t i = 0; i < CAPACITY; i++) {
+    key_score_map[static_cast<K>(i)] = static_cast<S>(i);
+  }
+
+  // --- Phase 2: Zipfian steady-state insertions (5× capacity) ---
+  uint64_t key_range = 10UL * CAPACITY;
+  double zipf_alpha = 0.99;
+  size_t steady_state_count = 5UL * CAPACITY;
+
+  std::cerr << " steady-state..." << std::flush;
+  ZipfianGenerator zipf_insert(key_range, zipf_alpha, 42);
+  uint64_t global_score = CAPACITY;  // continue from pre-populate scores
+  size_t inserted = 0;
+  while (inserted < steady_state_count) {
+    size_t cur = std::min(BATCH_SIZE, steady_state_count - inserted);
+    zipf_insert.fill(buf.h_keys, cur);
+    for (size_t i = 0; i < cur; i++) {
+      buf.h_scores[i] = global_score;
+      key_score_map[buf.h_keys[i]] = global_score;  // track latest score
+      global_score++;
+    }
+    CUDA_CHECK(cudaMemcpy(buf.d_keys, buf.h_keys, cur * sizeof(K),
+                           cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(buf.d_scores, buf.h_scores, cur * sizeof(S),
+                           cudaMemcpyHostToDevice));
+    table->insert_or_assign(cur, buf.d_keys, buf.d_vectors, buf.d_scores,
+                            stream);
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    inserted += cur;
+  }
+
+  // --- Phase 3: Export table contents ---
+  std::cerr << " export..." << std::flush;
+  K* h_export_keys;
+  S* h_export_scores;
+  K* d_export_keys;
+  V* d_export_values;
+  S* d_export_scores;
+
+  CUDA_CHECK(cudaMallocHost(&h_export_keys, CAPACITY * sizeof(K)));
+  CUDA_CHECK(cudaMallocHost(&h_export_scores, CAPACITY * sizeof(S)));
+  CUDA_CHECK(cudaMalloc(&d_export_keys, CAPACITY * sizeof(K)));
+  CUDA_CHECK(cudaMalloc(&d_export_values, CAPACITY * sizeof(V) * DIM));
+  CUDA_CHECK(cudaMalloc(&d_export_scores, CAPACITY * sizeof(S)));
+
+  size_t exported = table->export_batch(CAPACITY, 0, d_export_keys,
+                                         d_export_values, d_export_scores,
+                                         stream);
+  CUDA_CHECK(cudaStreamSynchronize(stream));
+  CUDA_CHECK(cudaMemcpy(h_export_keys, d_export_keys, exported * sizeof(K),
+                         cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(h_export_scores, d_export_scores, exported * sizeof(S),
+                         cudaMemcpyDeviceToHost));
+
+  // Build set of keys actually in the table
+  std::unordered_set<K> table_keys(h_export_keys, h_export_keys + exported);
+
+  // --- Phase 4: Compute ideal top-N set ---
+  // Sort all ever-inserted keys by their latest score (descending)
+  std::cerr << " compute ideal..." << std::flush;
+  std::vector<std::pair<S, K>> scored_keys;
+  scored_keys.reserve(key_score_map.size());
+  for (auto& kv : key_score_map) {
+    scored_keys.emplace_back(kv.second, kv.first);
+  }
+  // Sort descending by score
+  std::sort(scored_keys.begin(), scored_keys.end(),
+            [](const auto& a, const auto& b) { return a.first > b.first; });
+
+  // The ideal top-N: the CAPACITY keys with highest scores
+  size_t ideal_n = std::min(static_cast<size_t>(CAPACITY), scored_keys.size());
+  size_t retained = 0;
+  for (size_t i = 0; i < ideal_n; i++) {
+    if (table_keys.count(scored_keys[i].second)) {
+      retained++;
+    }
+  }
+
+  double retention_rate =
+      static_cast<double>(retained) / static_cast<double>(ideal_n);
+
+  std::cerr << " retention=" << retained << "/" << ideal_n
+            << " (" << std::fixed << std::setprecision(4)
+            << (retention_rate * 100.0) << "%)"
+            << " table_size=" << exported << std::endl;
+
+  std::cout << mode.name << ",score_retention," << BUCKET_SIZE << ","
+            << std::fixed << std::setprecision(6) << retention_rate
+            << "," << retained << "," << ideal_n << std::endl;
+
+  // Cleanup
+  CUDA_CHECK(cudaFreeHost(h_export_keys));
+  CUDA_CHECK(cudaFreeHost(h_export_scores));
+  CUDA_CHECK(cudaFree(d_export_keys));
+  CUDA_CHECK(cudaFree(d_export_values));
+  CUDA_CHECK(cudaFree(d_export_scores));
+}
+
+/* ================================================================
  * Main
  * ================================================================ */
 
@@ -434,12 +564,12 @@ int main(int argc, char** argv) {
             << ", Pure HBM, kCustomized" << std::endl;
 
   // Usage: ./e17_single_vs_dual [part]
-  // part: 0 for all (default), 1/2/3 for specific part
+  // part: 0 for all (default), 1/2/3/4 for specific part
   int target_part = 0;
   if (argc > 1) {
     target_part = std::atoi(argv[1]);
-    if (target_part < 0 || target_part > 3) {
-      std::cerr << "Error: part must be 0 (all), 1, 2, or 3" << std::endl;
+    if (target_part < 0 || target_part > 4) {
+      std::cerr << "Error: part must be 0 (all), 1, 2, 3, or 4" << std::endl;
       return 1;
     }
     if (target_part > 0)
@@ -475,6 +605,13 @@ int main(int argc, char** argv) {
                 << std::endl;
       for (int m = 0; m < NUM_MODES; m++) {
         part3_throughput(MODES[m], buf, stream);
+      }
+    }
+
+    if (target_part == 0 || target_part == 4) {
+      std::cerr << "=== Part 4: Top-K score retention ===" << std::endl;
+      for (int m = 0; m < NUM_MODES; m++) {
+        part4_score_retention(MODES[m], buf, stream);
       }
     }
 
