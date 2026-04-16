@@ -240,3 +240,7 @@ set_target_properties(e10_dual_bucket_analysis PROPERTIES CUDA_ARCHITECTURES OFF
 add_executable(e17_single_vs_dual benchmark/e17_single_vs_dual.cc.cu)
 target_compile_features(e17_single_vs_dual PUBLIC cxx_std_14)
 set_target_properties(e17_single_vs_dual PROPERTIES CUDA_ARCHITECTURES OFF)
+
+add_executable(trace_replay_benchmark benchmark/trace_replay_benchmark.cc.cu)
+target_compile_features(trace_replay_benchmark PUBLIC cxx_std_14)
+set_target_properties(trace_replay_benchmark PROPERTIES CUDA_ARCHITECTURES OFF)
