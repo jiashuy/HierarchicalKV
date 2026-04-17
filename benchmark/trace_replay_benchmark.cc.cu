@@ -29,7 +29,12 @@
  * Defaults: dim=32, batch_size=1M (experiment.md §7 Config B).
  *
  * Optional: --max-bucket-size N (N>0) sets HashTableOptions::max_bucket_size;
- * use with --capacity N for a single-bucket-style layout (Exp #5 new_baseline).
+ * Merlin requires N to be a power of two (>= 128).  --capacity does **not** need
+ * to be a power of two; the table's physical slot count is bucket-aligned
+ * (see create_table).  Baseline export/eviction uses table->capacity() after init
+ * so buffers match the real layout.  For predictable sizing (no silent rounding),
+ * choose --capacity as a multiple of --max-bucket-size (e.g. multiple of 1024
+ * when max_bucket_size=1024).
  *
  * Example:
  *   ./trace_replay_benchmark --trace day_0.bin --capacity 10000000 \
@@ -168,7 +173,7 @@ struct Args {
   float evict_fraction = 0.25f;
   size_t hbm_gb = 128;
   size_t max_keys = 0;
-  /** 0 = Merlin default (128); >0 must be power-of-two and satisfy Merlin bucket layout checks. */
+  /** 0 = Merlin default (128); >0 must be a power of two (Merlin MERLIN_CHECK). */
   size_t max_bucket_size = 0;
 };
 
@@ -286,9 +291,15 @@ static int run_typed(const Args& args, TraceConcat& trace) {
 
   auto table = std::make_shared<Table>();
   table->init(options);
-  std::cerr << "trace_replay_benchmark: capacity=" << args.capacity
+  const size_t table_slots = static_cast<size_t>(table->capacity());
+  std::cerr << "trace_replay_benchmark: init_capacity_arg=" << args.capacity
+            << " table_slots=" << table_slots
             << " max_bucket_size=" << (args.max_bucket_size > 0 ? args.max_bucket_size : size_t{128})
             << " mode=" << (args.baseline ? "baseline" : "cache") << "\n";
+  if (table_slots != args.capacity) {
+    std::cerr << "trace_replay_benchmark: note — physical table_slots differ from "
+                 "--capacity (bucket grid); baseline uses table_slots for export buffers.\n";
+  }
 
   const size_t batch = args.batch_size;
   const size_t nkeys =
@@ -325,11 +336,11 @@ static int run_typed(const Args& args, TraceConcat& trace) {
   S* d_export_scores = nullptr;
   K* d_evict_keys = nullptr;
   if (args.baseline) {
-    CUDA_CHECK(cudaMalloc(&d_export_keys, args.capacity * sizeof(K)));
+    CUDA_CHECK(cudaMalloc(&d_export_keys, table_slots * sizeof(K)));
     CUDA_CHECK(cudaMalloc(&d_export_vals,
-                          args.capacity * static_cast<size_t>(args.dim) * sizeof(V)));
-    CUDA_CHECK(cudaMalloc(&d_export_scores, args.capacity * sizeof(S)));
-    CUDA_CHECK(cudaMalloc(&d_evict_keys, args.capacity * sizeof(K)));
+                          table_slots * static_cast<size_t>(args.dim) * sizeof(V)));
+    CUDA_CHECK(cudaMalloc(&d_export_scores, table_slots * sizeof(S)));
+    CUDA_CHECK(cudaMalloc(&d_evict_keys, table_slots * sizeof(K)));
   }
 
   std::vector<K> h_export_keys;
@@ -348,7 +359,7 @@ static int run_typed(const Args& args, TraceConcat& trace) {
     *stall_ms_out = 0.0;
     auto t0 = std::chrono::high_resolution_clock::now();
 
-    const size_t dumped = table->export_batch(args.capacity, 0, d_export_keys, d_export_vals,
+    const size_t dumped = table->export_batch(table_slots, 0, d_export_keys, d_export_vals,
                                              d_export_scores, stream);
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
