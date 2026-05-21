@@ -17,12 +17,14 @@
 #pragma once
 
 #include <cstdint>
+#include <cub/cub.cuh>
+#include <cuda/std/functional>
 #include "allocator.cuh"
+#include "core_kernels/kernel_utils.cuh"
 #include "core_kernels/accum_or_assign.cuh"
 #include "core_kernels/contains.cuh"
 #include "core_kernels/find_or_insert.cuh"
 #include "core_kernels/find_ptr_or_insert.cuh"
-#include "core_kernels/kernel_utils.cuh"
 #include "core_kernels/lookup.cuh"
 #include "core_kernels/lookup_ptr.cuh"
 #include "core_kernels/update.cuh"
@@ -30,6 +32,12 @@
 #include "core_kernels/update_values.cuh"
 #include "core_kernels/upsert.cuh"
 #include "core_kernels/upsert_and_evict.cuh"
+// Dual-bucket headers depend on types from lookup.cuh and upsert.cuh
+// (FoundFunctorV1, LookupValueBufConfig, Params_Upsert,
+// SharedMemoryManager_Pipeline_Upsert), so they must come after.
+#include "core_kernels/dual_bucket_utils.cuh"
+#include "core_kernels/dual_bucket_upsert.cuh"
+#include "core_kernels/dual_bucket_lookup.cuh"
 
 namespace nv {
 namespace merlin {
@@ -55,11 +63,14 @@ __global__ void release_locks(S* __restrict mutex, const size_t start,
 template <class K, class V, class S>
 __global__ void create_atomic_keys(Bucket<K, V, S>* __restrict buckets,
                                    const size_t start, const size_t end,
-                                   const size_t bucket_max_size) {
+                                   const size_t bucket_max_size,
+                                   const bool dual_bucket_mode = false) {
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   if (start + tid < end) {
+    const D empty_d =
+        dual_bucket_mode ? dual_bucket_empty_digest<K>() : empty_digest<K>();
     for (size_t i = 0; i < bucket_max_size; i++)
-      buckets[start + tid].digests(i)[0] = empty_digest<K>();
+      buckets[start + tid].digests(i)[0] = empty_d;
     for (size_t i = 0; i < bucket_max_size; i++)
       new (buckets[start + tid].keys(i))
           AtomicKey<K>{static_cast<K>(EMPTY_KEY)};
@@ -265,7 +276,8 @@ void initialize_buckets(Table<K, V, S>** table, BaseAllocator* allocator,
     const size_t N = end - start + 1;
     const int grid_size = SAFE_GET_GRID_SIZE(N, block_size);
     create_atomic_keys<K, V, S><<<grid_size, block_size>>>(
-        (*table)->buckets, start, end, (*table)->bucket_max_size);
+        (*table)->buckets, start, end, (*table)->bucket_max_size,
+        (*table)->dual_bucket_mode);
   }
 
   {
@@ -319,9 +331,11 @@ void create_table(Table<K, V, S>** table, BaseAllocator* allocator,
                   const size_t max_hbm_for_vectors = 0,
                   const size_t bucket_max_size = 128,
                   const size_t num_of_buckets_per_alloc = 1,
-                  const size_t tile_size = 32, const bool primary = true) {
+                  const size_t tile_size = 32, const bool primary = true,
+                  const bool dual_bucket_mode = false) {
   allocator->alloc(MemoryType::Host, (void**)table, sizeof(Table<K, V, S>));
   std::memset(*table, 0, sizeof(Table<K, V, S>));
+  (*table)->dual_bucket_mode = dual_bucket_mode;
   (*table)->dim = dim;
   (*table)->bucket_max_size = bucket_max_size;
   (*table)->max_size = std::max(init_size, max_size);
@@ -644,13 +658,15 @@ __global__ void clear_kernel(Table<K, V, S>* __restrict table,
                              Bucket<K, V, S>* buckets, size_t N) {
   size_t tid = (blockIdx.x * blockDim.x) + threadIdx.x;
   const size_t bucket_max_size = table->bucket_max_size;
+  const D empty_d = table->dual_bucket_mode ? dual_bucket_empty_digest<K>()
+                                            : empty_digest<K>();
 
   for (size_t t = tid; t < N; t += blockDim.x * gridDim.x) {
     int key_idx = t % bucket_max_size;
     int bkt_idx = t / bucket_max_size;
     Bucket<K, V, S>* bucket = &(buckets[bkt_idx]);
 
-    bucket->digests(key_idx)[0] = empty_digest<K>();
+    bucket->digests(key_idx)[0] = empty_d;
     (bucket->keys(key_idx))
         ->store(static_cast<K>(EMPTY_KEY), cuda::std::memory_order_relaxed);
     if (key_idx == 0) {
@@ -757,7 +773,7 @@ __global__ void remove_kernel(const Table<K, V, S>* __restrict table,
         if (pred(current_key, current_score, pattern, threshold)) {
           atomicAdd(count, 1);
           key_pos = key_offset;
-          bucket->digests(key_pos)[0] = empty_digest<K>();
+          bucket->digests(key_pos)[0] = reclaim_digest<K>();
           (bucket->keys(key_pos))
               ->store(static_cast<K>(RECLAIM_KEY),
                       cuda::std::memory_order_relaxed);
@@ -814,7 +830,7 @@ __global__ void remove_kernel_v2(const uint64_t search_length,
     }
     // Only matched threads need to erase.
     if (match) {
-      bucket->digests(key_idx)[0] = empty_digest<K>();
+      bucket->digests(key_idx)[0] = reclaim_digest<K>();
       bucket->keys(key_idx)->store(static_cast<K>(RECLAIM_KEY),
                                    cuda::std::memory_order_relaxed);
       bucket->scores(key_idx)->store(static_cast<S>(EMPTY_SCORE),
@@ -1344,6 +1360,67 @@ WRITE_BACK:
     succeed[kv_idx] = found_;
   }
 }
+
+template <typename KeyT, typename ValueT>
+struct SortPairOp {
+  SortPairOp() : d_temp_storage(nullptr), temp_storage_bytes(0) {}
+
+  size_t get_storage_bytes(int batch, cudaStream_t stream) {
+    num_items = batch;
+    cub::DeviceRadixSort::SortPairs<KeyT, ValueT>(
+        d_temp_storage, temp_storage_bytes, nullptr, nullptr, nullptr, nullptr,
+        num_items, 0, sizeof(KeyT) * 8, stream);
+
+    return temp_storage_bytes;
+  }
+
+  void set_storage(void* storage) { d_temp_storage = storage; }
+
+  void sort(int batch, KeyT const* d_keys_in, KeyT* d_keys_out,
+            ValueT const* d_values_in, ValueT* d_values_out,
+            cudaStream_t stream) {
+    if (batch != num_items) {
+      throw std::runtime_error("Number of items is not matched when sort.");
+    }
+    cub::DeviceRadixSort::SortPairs(
+        d_temp_storage, temp_storage_bytes, d_keys_in, d_keys_out, d_values_in,
+        d_values_out, num_items, 0, sizeof(KeyT) * 8, stream);
+  }
+
+  void* d_temp_storage{nullptr};
+  size_t temp_storage_bytes{0};
+  int num_items{0};
+};
+
+template <typename InputT, typename OutputT>
+struct SumOp {
+  using InputIteratorT = InputT const*;
+  using OutputIteratorT = OutputT*;
+  SumOp() : d_temp_storage(nullptr), temp_storage_bytes(0) {}
+
+  size_t get_storage_bytes(int batch, cudaStream_t stream) {
+    num_items = batch;
+    cub::DeviceReduce::Reduce<InputIteratorT, OutputIteratorT>(
+        d_temp_storage, temp_storage_bytes, nullptr, nullptr, num_items,
+        cuda::std::plus<>(), 0, stream);
+    return temp_storage_bytes;
+  }
+
+  void set_storage(void* storage) { d_temp_storage = storage; }
+
+  void sum(int batch, InputIteratorT d_in, OutputIteratorT d_out,
+           cudaStream_t stream) {
+    if (batch != num_items) {
+      throw std::runtime_error("Number of items is not matched when sum.");
+    }
+    cub::DeviceReduce::Reduce(d_temp_storage, temp_storage_bytes, d_in, d_out,
+                              num_items, cuda::std::plus<>(), 0, stream);
+  }
+
+  void* d_temp_storage{nullptr};
+  size_t temp_storage_bytes{0};
+  int num_items{0};
+};
 
 }  // namespace merlin
 }  // namespace nv

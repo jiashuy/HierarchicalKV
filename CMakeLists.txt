@@ -17,8 +17,12 @@ cmake_minimum_required(VERSION 3.10)
 project(merlin-hkvs LANGUAGES CXX CUDA)
 find_package(CUDAToolkit)
 
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CUDA_STANDARD 14)
+# TODO(Q3): target_compile_features below still declare cxx_std_14, which is
+# inconsistent with the project-level C++17.  Update them to cxx_std_17 (or
+# remove the per-target lines entirely) once downstream compatibility is
+# confirmed.
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CUDA_STANDARD 17)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
 option(CLANGFORMAT "Clangformat code files before compiling" OFF)
@@ -145,6 +149,11 @@ target_compile_features(assign_score_test PUBLIC cxx_std_14)
 set_target_properties(assign_score_test PROPERTIES  CUDA_ARCHITECTURES OFF)
 TARGET_LINK_LIBRARIES(assign_score_test gtest_main)
 
+add_executable(uint32_score_test tests/uint32_score_test.cc.cu)
+target_compile_features(uint32_score_test PUBLIC cxx_std_14)
+set_target_properties(uint32_score_test PROPERTIES  CUDA_ARCHITECTURES OFF)
+TARGET_LINK_LIBRARIES(uint32_score_test gtest_main)
+
 add_executable(accum_or_assign_test tests/accum_or_assign_test.cc)
 target_compile_features(accum_or_assign_test PUBLIC cxx_std_14)
 set_target_properties(accum_or_assign_test PROPERTIES  CUDA_ARCHITECTURES OFF)
@@ -178,3 +187,12 @@ add_executable(lock_unlock_test tests/lock_unlock_test.cc.cu)
 target_compile_features(lock_unlock_test PUBLIC cxx_std_14)
 set_target_properties(lock_unlock_test PROPERTIES  CUDA_ARCHITECTURES OFF)
 TARGET_LINK_LIBRARIES(lock_unlock_test gtest_main)
+
+add_executable(dual_bucket_test tests/dual_bucket_test.cc.cu)
+target_compile_features(dual_bucket_test PUBLIC cxx_std_14)
+set_target_properties(dual_bucket_test PROPERTIES  CUDA_ARCHITECTURES OFF)
+TARGET_LINK_LIBRARIES(dual_bucket_test gtest_main)
+
+add_executable(dual_bucket_benchmark benchmark/dual_bucket_benchmark.cc.cu)
+target_compile_features(dual_bucket_benchmark PUBLIC cxx_std_14)
+set_target_properties(dual_bucket_benchmark PROPERTIES  CUDA_ARCHITECTURES OFF)
